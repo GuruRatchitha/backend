@@ -62,7 +62,7 @@ public class Beneficiary {
 
     @Builder.Default
     @Column(nullable = false, length = 8)
-    private String status = "active";
+    private String status = "PENDING";
 
     @PrePersist
     private void prePersist() {
@@ -82,11 +82,11 @@ public class Beneficiary {
             countryCode = "US";
         }
         if (status == null || status.isBlank()) {
-            status = "active";
+            status = "PENDING";
         }
-        status = status.toLowerCase();
-        if (!"active".equals(status) && !"inactive".equals(status)) {
-            throw new IllegalArgumentException("Beneficiary status must be active or inactive");
+        status = status.toUpperCase();
+        if (!"PENDING".equals(status) && !"ACTIVE".equals(status) && !"REJECTED".equals(status) && !"INACTIVE".equals(status)) {
+            throw new IllegalArgumentException("Beneficiary status must be PENDING, ACTIVE, REJECTED, or INACTIVE");
         }
     }
 }

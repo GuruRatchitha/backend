@@ -19,6 +19,19 @@ public class LoginResponse {
 
     private String email;
 
+    // Includes the user's profile data needed by the client immediately after login.
+    private String password;
+
+    private String aadharNumber;
+
+    private String panCardNumber;
+
+    private String phoneNumber;
+
+    private String address;
+
+    private java.time.LocalDateTime createdDate;
+
     // Sends the database role_id back to the client after successful login.
     private Long roleId;
 

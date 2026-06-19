@@ -23,7 +23,7 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<LoginResponse> login(@RequestBody(required = false) LoginRequest request) {
         // AuthService now owns the login response status and payload construction.
         return authService.login(request);
     }

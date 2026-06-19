@@ -13,4 +13,6 @@ public interface BeneficiaryRepository extends JpaRepository<Beneficiary, Benefi
     boolean existsByUserIdAndAccountNumber(Long userId, String accountNumber);
 
     List<Beneficiary> findByUserIdOrderByCreatedDateDesc(Long userId);
+
+    List<Beneficiary> findByStatusOrderByCreatedDateDesc(String status);
 }

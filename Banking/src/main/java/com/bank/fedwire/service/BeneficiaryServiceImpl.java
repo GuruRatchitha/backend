@@ -4,6 +4,7 @@ import com.bank.fedwire.dto.BeneficiaryCreateResponse;
 import com.bank.fedwire.dto.BeneficiaryRequest;
 import com.bank.fedwire.dto.BeneficiaryResponse;
 import com.bank.fedwire.entity.Beneficiary;
+import com.bank.fedwire.entity.BeneficiaryId;
 import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.UserRepository;
@@ -43,7 +44,8 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
                 .countryCode("US")
                 .accountNumber(accountNumber)
                 .routingNumber(request.getRoutingNumber().trim())
-                .status(normalizeStatus(request.getStatus()))
+                // New customer beneficiaries must wait for employee approval before payment is enabled.
+                .status("PENDING")
                 .build();
 
         Beneficiary savedBeneficiary = beneficiaryRepository.save(beneficiary);
@@ -60,6 +62,38 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         return beneficiaryRepository.findByUserIdOrderByCreatedDateDesc(userId).stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BeneficiaryResponse> getPendingBeneficiaries() {
+        return beneficiaryRepository.findByStatusOrderByCreatedDateDesc("PENDING").stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public BeneficiaryCreateResponse approveBeneficiary(Long userId, String accountNumber, String routingNumber) {
+        Beneficiary beneficiary = getBeneficiary(userId, accountNumber, routingNumber);
+        beneficiary.setStatus("ACTIVE");
+
+        return BeneficiaryCreateResponse.builder()
+                .message("Beneficiary approved successfully")
+                .beneficiary(toResponse(beneficiaryRepository.save(beneficiary)))
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber) {
+        Beneficiary beneficiary = getBeneficiary(userId, accountNumber, routingNumber);
+        beneficiary.setStatus("REJECTED");
+
+        return BeneficiaryCreateResponse.builder()
+                .message("Beneficiary rejected successfully")
+                .beneficiary(toResponse(beneficiaryRepository.save(beneficiary)))
+                .build();
     }
 
     private void validateRequest(BeneficiaryRequest request) {
@@ -81,7 +115,6 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         if (request.getTownName().trim().length() > 35) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "townName must be 35 characters or less");
         }
-        normalizeStatus(request.getStatus());
     }
 
     private void requireText(String value, String message) {
@@ -90,16 +123,14 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         }
     }
 
-    private String normalizeStatus(String status) {
-        if (status == null || status.isBlank()) {
-            return "inactive";
-        }
+    private Beneficiary getBeneficiary(Long userId, String accountNumber, String routingNumber) {
+        requireText(accountNumber, "accountNumber is required");
+        requireText(routingNumber, "routingNumber is required");
 
-        String normalizedStatus = status.trim().toLowerCase();
-        if (!"active".equals(normalizedStatus) && !"inactive".equals(normalizedStatus)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status must be active or inactive");
-        }
-        return normalizedStatus;
+        // Beneficiary rows use a composite key, so the employee action identifies the same saved record by all key parts.
+        BeneficiaryId beneficiaryId = new BeneficiaryId(userId, accountNumber.trim(), routingNumber.trim());
+        return beneficiaryRepository.findById(beneficiaryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiary not found"));
     }
 
     private BeneficiaryResponse toResponse(Beneficiary beneficiary) {
