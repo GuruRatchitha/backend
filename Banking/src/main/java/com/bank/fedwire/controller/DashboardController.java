@@ -1,6 +1,7 @@
 package com.bank.fedwire.controller;
 
 import com.bank.fedwire.dto.DashboardSummaryResponse;
+import com.bank.fedwire.dto.TransactionPageResponse;
 import com.bank.fedwire.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -24,5 +25,14 @@ public class DashboardController {
     @GetMapping("/summary")
     public ResponseEntity<DashboardSummaryResponse> getSummary(@RequestParam Long userId) {
         return ResponseEntity.ok(dashboardService.getSummary(userId));
+    }
+
+    @GetMapping("/transactions")
+    public ResponseEntity<TransactionPageResponse> getTransactions(
+            @RequestParam Long userId,
+            @RequestParam(defaultValue = "all") String limit,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(dashboardService.getTransactions(userId, limit, page, size));
     }
 }

@@ -1,8 +1,11 @@
 package com.bank.fedwire.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import jakarta.persistence.Column;
+import jakarta.persistence.ConstraintMode;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -40,8 +43,17 @@ public class MessageHeader {
 
     private LocalDateTime createdDate;
 
+    @Column(name = "transaction_id")
+    private Long transactionId;
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "transferId")
-    @JsonBackReference("credit-transfer-message-headers")
-    private CreditTransfer creditTransfer;
+    @JoinColumn(
+            name = "transaction_id",
+            referencedColumnName = "transaction_id",
+            insertable = false,
+            updatable = false,
+            foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT)
+    )
+    @JsonBackReference("transaction-message-headers")
+    private Transaction transaction;
 }

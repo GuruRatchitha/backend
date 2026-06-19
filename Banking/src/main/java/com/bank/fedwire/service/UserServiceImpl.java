@@ -15,8 +15,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    private static final String MASKED_PASSWORD = "********";
-
     private final UserRepository userRepository;
 
     @Override
@@ -34,7 +32,6 @@ public class UserServiceImpl implements UserService {
         user.setAadharNumber(request.getAadharNumber());
         user.setAddress(request.getAddress());
         user.setPanCardNumber(request.getPanCardNumber());
-        user.setPassword(request.getPassword());
         user.setPhoneNumber(request.getPhoneNumber());
         user.setUserName(request.getUsername());
 
@@ -57,7 +54,7 @@ public class UserServiceImpl implements UserService {
                 .aadharNumber(user.getAadharNumber())
                 .address(user.getAddress())
                 .panCardNumber(user.getPanCardNumber())
-                .password(MASKED_PASSWORD)
+                .password(user.getPassword())
                 .phoneNumber(user.getPhoneNumber())
                 .username(user.getUserName())
                 .build();

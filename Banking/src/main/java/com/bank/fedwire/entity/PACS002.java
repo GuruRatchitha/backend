@@ -1,6 +1,5 @@
 package com.bank.fedwire.entity;
 
-import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -40,10 +39,8 @@ public class PACS002 {
     @Column(columnDefinition = "TEXT")
     private String xmlPayload;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "transferId")
-    @JsonBackReference("credit-transfer-pacs002")
-    private CreditTransfer creditTransfer;
+    @Column(name = "transaction_id")
+    private Long transactionId;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "messageId")

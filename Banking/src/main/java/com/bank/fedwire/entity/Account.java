@@ -2,6 +2,7 @@ package com.bank.fedwire.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -35,6 +36,7 @@ public class Account {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long accountId;
 
+    @Column(name = "account_number")
     private String accountNumber;
 
     private String iban;
@@ -55,7 +57,7 @@ public class Account {
     private User user;
 
     @OneToMany(mappedBy = "account")
-    @JsonManagedReference("account-credit-transfers")
+    @JsonManagedReference("account-transactions")
     @Builder.Default
-    private List<CreditTransfer> creditTransfers = new ArrayList<>();
+    private List<Transaction> transactions = new ArrayList<>();
 }
