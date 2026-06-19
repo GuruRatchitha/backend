@@ -19,8 +19,10 @@ public class LoginResponse {
 
     private String email;
 
+    // Sends the database role_id back to the client after successful login.
     private Long roleId;
 
+    // Sends the application role name resolved from role_id without changing the users table.
     private String roleName;
 
     private String message;

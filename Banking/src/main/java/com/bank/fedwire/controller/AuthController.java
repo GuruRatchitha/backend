@@ -4,7 +4,6 @@ import com.bank.fedwire.dto.LoginRequest;
 import com.bank.fedwire.dto.LoginResponse;
 import com.bank.fedwire.service.AuthService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,11 +24,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-        return authService.login(request)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(LoginResponse.builder()
-                                .message("Invalid email or password")
-                                .build()));
+        // AuthService now owns the login response status and payload construction.
+        return authService.login(request);
     }
 }
