@@ -1,6 +1,7 @@
 package com.bank.fedwire.controller;
 
 import com.bank.fedwire.dto.BeneficiaryCreateResponse;
+import com.bank.fedwire.dto.BeneficiaryRejectRequest;
 import com.bank.fedwire.dto.BeneficiaryResponse;
 import com.bank.fedwire.service.BeneficiaryService;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -47,11 +49,16 @@ public class EmployeeBeneficiaryController {
     public ResponseEntity<BeneficiaryCreateResponse> rejectBeneficiary(
             @PathVariable Long userId,
             @PathVariable String accountNumber,
-            @PathVariable String routingNumber) {
+            @PathVariable String routingNumber,
+            @RequestBody BeneficiaryRejectRequest request) {
         validateUserId(userId);
 
-        // Rejects the existing pending beneficiary record so the customer can still see its final status.
-        return ResponseEntity.ok(beneficiaryService.rejectBeneficiary(userId, accountNumber, routingNumber));
+        // Rejects the existing pending beneficiary record and keeps the reason visible to the customer.
+        return ResponseEntity.ok(beneficiaryService.rejectBeneficiary(
+                userId,
+                accountNumber,
+                routingNumber,
+                request != null ? request.getRejectionReason() : null));
     }
 
     private void validateUserId(Long userId) {

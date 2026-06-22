@@ -17,6 +17,9 @@ public class BeneficiaryResponse {
 
     private Long userId;
 
+    // Customer name is returned for employee approval screens.
+    private String customerName;
+
     private String beneficiaryName;
 
     private String townName;
@@ -30,4 +33,7 @@ public class BeneficiaryResponse {
     private LocalDateTime createdDate;
 
     private String status;
+
+    // Rejection reason is returned to the customer after an employee rejects the beneficiary.
+    private String rejectionReason;
 }

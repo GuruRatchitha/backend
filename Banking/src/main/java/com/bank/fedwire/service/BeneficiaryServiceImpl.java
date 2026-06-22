@@ -77,6 +77,7 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
     public BeneficiaryCreateResponse approveBeneficiary(Long userId, String accountNumber, String routingNumber) {
         Beneficiary beneficiary = getBeneficiary(userId, accountNumber, routingNumber);
         beneficiary.setStatus("ACTIVE");
+        beneficiary.setRejectionReason(null);
 
         return BeneficiaryCreateResponse.builder()
                 .message("Beneficiary approved successfully")
@@ -86,9 +87,13 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
 
     @Override
     @Transactional
-    public BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber) {
+    public BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber, String rejectionReason) {
+        requireText(rejectionReason, "rejectionReason is required");
+
         Beneficiary beneficiary = getBeneficiary(userId, accountNumber, routingNumber);
         beneficiary.setStatus("REJECTED");
+        // Save the employee's rejection reason on the same beneficiary row for the customer list API.
+        beneficiary.setRejectionReason(rejectionReason.trim());
 
         return BeneficiaryCreateResponse.builder()
                 .message("Beneficiary rejected successfully")
@@ -134,8 +139,11 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
     }
 
     private BeneficiaryResponse toResponse(Beneficiary beneficiary) {
+        String customerName = beneficiary.getUser() != null ? beneficiary.getUser().getUserName() : null;
+
         return BeneficiaryResponse.builder()
                 .userId(beneficiary.getUserId())
+                .customerName(customerName)
                 .beneficiaryName(beneficiary.getBeneficiaryName())
                 .townName(beneficiary.getTownName())
                 .countryCode(beneficiary.getCountryCode())
@@ -143,6 +151,7 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
                 .routingNumber(beneficiary.getRoutingNumber())
                 .createdDate(beneficiary.getCreatedDate())
                 .status(beneficiary.getStatus())
+                .rejectionReason(beneficiary.getRejectionReason())
                 .build();
     }
 }

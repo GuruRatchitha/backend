@@ -64,6 +64,9 @@ public class Beneficiary {
     @Column(nullable = false, length = 8)
     private String status = "PENDING";
 
+    @Column(name = "rejection_reason", length = 255)
+    private String rejectionReason;
+
     @PrePersist
     private void prePersist() {
         normalizeDefaults();

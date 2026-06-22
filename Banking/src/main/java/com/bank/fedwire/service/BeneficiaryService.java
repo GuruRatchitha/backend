@@ -16,5 +16,5 @@ public interface BeneficiaryService {
 
     BeneficiaryCreateResponse approveBeneficiary(Long userId, String accountNumber, String routingNumber);
 
-    BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber);
+    BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber, String rejectionReason);
 }
