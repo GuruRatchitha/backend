@@ -38,6 +38,15 @@ public class Transaction {
     @Column(name = "transaction_id")
     private Long transactionId;
 
+    @Column(name = "transfer_id", nullable = false, unique = true, length = 35)
+    private String transferId;
+
+    @Column(name = "payment_transaction_id", nullable = false, unique = true, length = 35)
+    private String paymentTransactionId;
+
+    @Column(name = "bank_transaction_id", nullable = false, unique = true, length = 22)
+    private String bankTransactionId;
+
     @Column(name = "account_number", nullable = false)
     private String accountNumber;
 
@@ -46,6 +55,12 @@ public class Transaction {
 
     @Column(name = "beneficiary_name", nullable = false)
     private String beneficiaryName;
+
+    @Column(name = "beneficiary_account_number", nullable = false)
+    private String beneficiaryAccountNumber;
+
+    @Column(name = "beneficiary_routing_number", nullable = false)
+    private String beneficiaryRoutingNumber;
 
     private String remarks;
 

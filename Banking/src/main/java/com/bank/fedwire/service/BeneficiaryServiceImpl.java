@@ -4,7 +4,6 @@ import com.bank.fedwire.dto.BeneficiaryCreateResponse;
 import com.bank.fedwire.dto.BeneficiaryRequest;
 import com.bank.fedwire.dto.BeneficiaryResponse;
 import com.bank.fedwire.entity.Beneficiary;
-import com.bank.fedwire.entity.BeneficiaryId;
 import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.UserRepository;
@@ -76,7 +75,7 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
     @Transactional
     public BeneficiaryCreateResponse approveBeneficiary(Long userId, String accountNumber, String routingNumber) {
         Beneficiary beneficiary = getBeneficiary(userId, accountNumber, routingNumber);
-        beneficiary.setStatus("ACTIVE");
+        beneficiary.setStatus("APPROVED");
         beneficiary.setRejectionReason(null);
 
         return BeneficiaryCreateResponse.builder()
@@ -132,9 +131,8 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         requireText(accountNumber, "accountNumber is required");
         requireText(routingNumber, "routingNumber is required");
 
-        // Beneficiary rows use a composite key, so the employee action identifies the same saved record by all key parts.
-        BeneficiaryId beneficiaryId = new BeneficiaryId(userId, accountNumber.trim(), routingNumber.trim());
-        return beneficiaryRepository.findById(beneficiaryId)
+        return beneficiaryRepository.findByUserIdAndAccountNumberAndRoutingNumber(
+                        userId, accountNumber.trim(), routingNumber.trim())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiary not found"));
     }
 
@@ -142,6 +140,7 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         String customerName = beneficiary.getUser() != null ? beneficiary.getUser().getUserName() : null;
 
         return BeneficiaryResponse.builder()
+                .beneficiaryId(beneficiary.getBeneficiaryId())
                 .userId(beneficiary.getUserId())
                 .customerName(customerName)
                 .beneficiaryName(beneficiary.getBeneficiaryName())

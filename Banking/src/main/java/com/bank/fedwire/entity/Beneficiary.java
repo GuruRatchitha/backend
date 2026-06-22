@@ -4,8 +4,9 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.IdClass;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
@@ -22,7 +23,6 @@ import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "beneficiary")
-@IdClass(BeneficiaryId.class)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -31,6 +31,10 @@ import java.time.ZoneOffset;
 public class Beneficiary {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "beneficiary_id")
+    private Long beneficiaryId;
+
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
@@ -49,11 +53,9 @@ public class Beneficiary {
     @Column(name = "country_code", nullable = false, length = 2, updatable = false)
     private String countryCode = "US";
 
-    @Id
     @Column(name = "account_number", nullable = false)
     private String accountNumber;
 
-    @Id
     @Column(name = "routing_number", nullable = false)
     private String routingNumber;
 
@@ -88,8 +90,9 @@ public class Beneficiary {
             status = "PENDING";
         }
         status = status.toUpperCase();
-        if (!"PENDING".equals(status) && !"ACTIVE".equals(status) && !"REJECTED".equals(status) && !"INACTIVE".equals(status)) {
-            throw new IllegalArgumentException("Beneficiary status must be PENDING, ACTIVE, REJECTED, or INACTIVE");
+        if (!"PENDING".equals(status) && !"ACTIVE".equals(status) && !"APPROVED".equals(status)
+                && !"REJECTED".equals(status) && !"INACTIVE".equals(status)) {
+            throw new IllegalArgumentException("Beneficiary status must be PENDING, ACTIVE, APPROVED, REJECTED, or INACTIVE");
         }
     }
 }

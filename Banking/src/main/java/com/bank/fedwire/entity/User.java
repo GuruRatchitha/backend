@@ -48,6 +48,11 @@ public class User {
 
     private String address;
 
+    @Builder.Default
+    private String countryCode = "us";
+
+    private String townName;
+
     private LocalDateTime createdDate;
 
     @ManyToOne(fetch = FetchType.LAZY)

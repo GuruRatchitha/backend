@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 @Builder
 public class BeneficiaryResponse {
 
+    private Long beneficiaryId;
+
     private Long userId;
 
     // Customer name is returned for employee approval screens.

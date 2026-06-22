@@ -43,6 +43,6 @@ public class PACS002 {
     private Long transactionId;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "messageId")
+    @JoinColumn(name = "message_id")
     private MessageHeader messageHeader;
 }

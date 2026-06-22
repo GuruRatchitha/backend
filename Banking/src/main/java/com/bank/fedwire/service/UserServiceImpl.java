@@ -34,6 +34,8 @@ public class UserServiceImpl implements UserService {
         user.setPanCardNumber(request.getPanCardNumber());
         user.setPhoneNumber(request.getPhoneNumber());
         user.setUserName(request.getUsername());
+        user.setCountryCode(request.getCountryCode());
+        user.setTownName(request.getTownName());
 
         return toProfileResponse(userRepository.save(user));
     }
@@ -57,6 +59,8 @@ public class UserServiceImpl implements UserService {
                 .password(user.getPassword())
                 .phoneNumber(user.getPhoneNumber())
                 .username(user.getUserName())
+                .countryCode(user.getCountryCode())
+                .townName(user.getTownName())
                 .build();
     }
 }

@@ -22,4 +22,8 @@ public class UserProfileUpdateRequest {
     private String phoneNumber;
 
     private String username;
+
+    private String countryCode;
+
+    private String townName;
 }
