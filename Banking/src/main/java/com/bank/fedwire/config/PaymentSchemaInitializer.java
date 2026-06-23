@@ -39,9 +39,22 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
     }
 
     private void ensurePaymentMessageTables() {
-        if (!tableExists("message_header") || !isMessageIdVarchar22()) {
+        if (!tableExists("message_header") || !tableExists("pacs008") || !isMessageIdVarchar22()) {
             recreatePaymentMessageTables();
+            return;
         }
+
+        ensurePacs008Columns();
+    }
+
+    private void ensurePacs008Columns() {
+        addColumnIfMissing("pacs008", "tx_id", "ALTER TABLE pacs008 ADD COLUMN tx_id VARCHAR(35) NOT NULL DEFAULT '' AFTER instruction_id");
+        addColumnIfMissing("pacs008", "from_mmb_id", "ALTER TABLE pacs008 ADD COLUMN from_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER tx_id");
+        addColumnIfMissing("pacs008", "to_mmb_id", "ALTER TABLE pacs008 ADD COLUMN to_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER from_mmb_id");
+        addColumnIfMissing("pacs008", "instg_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN instg_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER to_mmb_id");
+        addColumnIfMissing("pacs008", "instd_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN instd_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER instg_agt_mmb_id");
+        addColumnIfMissing("pacs008", "dbtr_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN dbtr_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER instd_agt_mmb_id");
+        addColumnIfMissing("pacs008", "cdtr_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN cdtr_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER dbtr_agt_mmb_id");
     }
 
     private void recreatePaymentMessageTables() {
@@ -71,6 +84,13 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                     message_id VARCHAR(22) NOT NULL,
                     transfer_id VARCHAR(35) NOT NULL,
                     instruction_id VARCHAR(35) NOT NULL,
+                    tx_id VARCHAR(35) NOT NULL,
+                    from_mmb_id VARCHAR(9) NOT NULL,
+                    to_mmb_id VARCHAR(9) NOT NULL,
+                    instg_agt_mmb_id VARCHAR(9) NOT NULL,
+                    instd_agt_mmb_id VARCHAR(9) NOT NULL,
+                    dbtr_agt_mmb_id VARCHAR(9) NOT NULL,
+                    cdtr_agt_mmb_id VARCHAR(9) NOT NULL,
                     end_to_end_id VARCHAR(10) NOT NULL,
                     uetr VARCHAR(36) NOT NULL,
                     payment_transaction_id VARCHAR(35) NOT NULL,

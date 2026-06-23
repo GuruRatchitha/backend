@@ -64,7 +64,13 @@ public class PaymentServiceImpl implements PaymentService {
         String transferId = idGenerationService.generateTransferId();
         String paymentTransactionId = idGenerationService.generatePaymentTransactionId();
         String bankTransactionId = idGenerationService.generateBankTransactionId();
-        String businessMessageId = idGenerationService.generateBusinessMessageId();
+        String messageId = idGenerationService.generateMessageId();
+        String fromMmbId = idGenerationService.generateMemberId();
+        String toMmbId = idGenerationService.generateMemberId();
+        String instgAgtMmbId = idGenerationService.generateMemberId();
+        String instdAgtMmbId = idGenerationService.generateMemberId();
+        String dbtrAgtMmbId = instgAgtMmbId;
+        String cdtrAgtMmbId = instdAgtMmbId;
 
         Transaction transaction = transactionRepository.save(Transaction.builder()
                 .transferId(transferId)
@@ -82,8 +88,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .build());
 
         MessageHeader messageHeader = messageHeaderRepository.save(MessageHeader.builder()
-                .messageId(businessMessageId)
-                .businessMessageId(businessMessageId)
+                .messageId(messageId)
+                .businessMessageId(messageId)
                 .messageType(MESSAGE_TYPE)
                 .direction(DIRECTION)
                 .messageStatus(TransactionStatus.PENDING.name())
@@ -95,7 +101,14 @@ public class PaymentServiceImpl implements PaymentService {
                 .transactionId(transaction.getTransactionId())
                 .messageId(messageHeader.getMessageId())
                 .transferId(transferId)
-                .instructionId(idGenerationService.generateSampleUuid35())
+                .instructionId(idGenerationService.generateInstructionId())
+                .txId(idGenerationService.generateTxId())
+                .fromMmbId(fromMmbId)
+                .toMmbId(toMmbId)
+                .instgAgtMmbId(instgAgtMmbId)
+                .instdAgtMmbId(instdAgtMmbId)
+                .dbtrAgtMmbId(dbtrAgtMmbId)
+                .cdtrAgtMmbId(cdtrAgtMmbId)
                 .endToEndId(idGenerationService.generateEndToEndId())
                 .uetr(idGenerationService.generateUetr())
                 .paymentTransactionId(paymentTransactionId)
@@ -126,6 +139,16 @@ public class PaymentServiceImpl implements PaymentService {
                 .messageId(messageHeader.getMessageId())
                 .businessMessageId(messageHeader.getBusinessMessageId())
                 .pacs008Id(pacs008.getPacs008Id())
+                .instructionId(pacs008.getInstructionId())
+                .txId(pacs008.getTxId())
+                .uetr(pacs008.getUetr())
+                .endToEndId(pacs008.getEndToEndId())
+                .fromMmbId(pacs008.getFromMmbId())
+                .toMmbId(pacs008.getToMmbId())
+                .instgAgtMmbId(pacs008.getInstgAgtMmbId())
+                .instdAgtMmbId(pacs008.getInstdAgtMmbId())
+                .dbtrAgtMmbId(pacs008.getDbtrAgtMmbId())
+                .cdtrAgtMmbId(pacs008.getCdtrAgtMmbId())
                 .amount(transaction.getAmount())
                 .currency(pacs008.getCurrency())
                 .transactionStatus(transaction.getTransactionStatus())

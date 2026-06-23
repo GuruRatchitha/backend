@@ -17,11 +17,15 @@ public class IdGenerationService {
     private final AtomicInteger sequence = new AtomicInteger(0);
 
     public String generateBusinessMessageId() {
+        return generateMessageId();
+    }
+
+    public String generateMessageId() {
         return LocalDate.now().format(BASIC_DATE) + randomUpperAlphanumeric(8) + nextSixDigitSequence();
     }
 
-    public String generateSampleUuid35() {
-        return UUID.randomUUID().toString().substring(0, 35);
+    public String generateUniqueAlphanumericHyphenId(String prefix) {
+        return prefix + "-" + LocalDate.now().format(BASIC_DATE) + randomUpperAlphanumeric(8) + nextSixDigitSequence();
     }
 
     public String generateUetr() {
@@ -29,19 +33,31 @@ public class IdGenerationService {
     }
 
     public String generateEndToEndId() {
-        return "INV" + String.format("%07d", nextSequenceValue());
+        return "INV0019253";
     }
 
     public String generateTransferId() {
-        return generateSampleUuid35();
+        return generateUniqueAlphanumericHyphenId("TRF");
     }
 
     public String generatePaymentTransactionId() {
-        return generateSampleUuid35();
+        return generateUniqueAlphanumericHyphenId("PMT");
     }
 
     public String generateBankTransactionId() {
-        return generateBusinessMessageId();
+        return generateMessageId();
+    }
+
+    public String generateInstructionId() {
+        return generateUniqueAlphanumericHyphenId("INS");
+    }
+
+    public String generateTxId() {
+        return generateUniqueAlphanumericHyphenId("TX");
+    }
+
+    public String generateMemberId() {
+        return String.format("%09d", nextSequenceValue());
     }
 
     private String randomUpperAlphanumeric(int length) {

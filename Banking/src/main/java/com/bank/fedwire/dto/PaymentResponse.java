@@ -30,6 +30,26 @@ public class PaymentResponse {
 
     private Long pacs008Id;
 
+    private String instructionId;
+
+    private String txId;
+
+    private String uetr;
+
+    private String endToEndId;
+
+    private String fromMmbId;
+
+    private String toMmbId;
+
+    private String instgAgtMmbId;
+
+    private String instdAgtMmbId;
+
+    private String dbtrAgtMmbId;
+
+    private String cdtrAgtMmbId;
+
     private BigDecimal amount;
 
     private String currency;

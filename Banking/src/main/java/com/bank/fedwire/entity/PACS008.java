@@ -49,6 +49,27 @@ public class PACS008 {
     @Column(name = "instruction_id", nullable = false, length = 35)
     private String instructionId;
 
+    @Column(name = "tx_id", nullable = false, length = 35)
+    private String txId;
+
+    @Column(name = "from_mmb_id", nullable = false, length = 9)
+    private String fromMmbId;
+
+    @Column(name = "to_mmb_id", nullable = false, length = 9)
+    private String toMmbId;
+
+    @Column(name = "instg_agt_mmb_id", nullable = false, length = 9)
+    private String instgAgtMmbId;
+
+    @Column(name = "instd_agt_mmb_id", nullable = false, length = 9)
+    private String instdAgtMmbId;
+
+    @Column(name = "dbtr_agt_mmb_id", nullable = false, length = 9)
+    private String dbtrAgtMmbId;
+
+    @Column(name = "cdtr_agt_mmb_id", nullable = false, length = 9)
+    private String cdtrAgtMmbId;
+
     @Column(name = "end_to_end_id", nullable = false, length = 10)
     private String endToEndId;
 
