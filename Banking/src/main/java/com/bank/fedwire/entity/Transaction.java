@@ -62,6 +62,9 @@ public class Transaction {
     @Column(name = "beneficiary_routing_number", nullable = false)
     private String beneficiaryRoutingNumber;
 
+    @Column(name = "pending_payment_key", unique = true, length = 64)
+    private String pendingPaymentKey;
+
     private String remarks;
 
     @Column(name = "transaction_date_time", nullable = false)

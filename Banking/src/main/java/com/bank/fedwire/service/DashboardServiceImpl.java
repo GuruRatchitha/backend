@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -44,7 +45,10 @@ public class DashboardServiceImpl implements DashboardService {
         return DashboardSummaryResponse.builder()
                 .totalBalance(totalBalance)
                 .accountCount(accountRepository.countByUserUserId(userId))
-                .completedTransactions(transactionRepository.countByStatusAndUserId(TransactionStatus.COMPLETED, userId))
+                .completedTransactions(transactionRepository.countByTransactionStatusInAndUserId(Set.of(
+                        TransactionStatus.APPROVED.name(),
+                        TransactionStatus.COMPLETED.name()
+                ), userId))
                 .pendingTransactions(transactionRepository.countByStatusAndUserId(TransactionStatus.PENDING, userId))
                 .accounts(accountSummaries)
                 .build();

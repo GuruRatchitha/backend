@@ -18,31 +18,34 @@ public class TransactionDetailResponse {
 
     private Long transactionId;
 
-    private String transactionReference;
+    private PartyDetails senderDetails;
 
-    private BigDecimal amount;
+    private PartyDetails receiverDetails;
 
-    private String currency;
+    private PaymentDetails paymentDetails;
 
-    private String purpose;
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class PartyDetails {
+        private String name;
+        private String accountNumber;
+        private String routingNumber;
+        private String bankName;
+    }
 
-    private String transactionStatus;
-
-    private String transferStatus;
-
-    private LocalDateTime createdDate;
-
-    private String accountNumber;
-
-    private String accountType;
-
-    private String beneficiaryName;
-
-    private String beneficiaryAccountNumber;
-
-    private String beneficiaryRoutingNumber;
-
-    private String beneficiaryTownName;
-
-    private String beneficiaryCountryCode;
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class PaymentDetails {
+        private String transactionReference;
+        private BigDecimal amount;
+        private LocalDateTime paymentDate;
+        private String status;
+        private String channel;
+    }
 }

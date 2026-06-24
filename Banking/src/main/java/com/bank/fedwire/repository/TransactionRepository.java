@@ -11,9 +11,16 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Collection;
+import java.util.Optional;
 
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
+
+    Optional<Transaction> findByPendingPaymentKey(String pendingPaymentKey);
+
+    @EntityGraph(attributePaths = {"account", "account.user"})
+    Optional<Transaction> findByTransactionId(Long transactionId);
 
     @Query("select count(t) from BankTransaction t where t.transactionStatus = :#{#status.name()}")
     long countByStatus(@Param("status") TransactionStatus status);
@@ -26,12 +33,23 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             """)
     long countByStatusAndUserId(@Param("status") TransactionStatus status, @Param("userId") Long userId);
 
-    @EntityGraph(attributePaths = "account")
+    @Query("""
+            select count(c)
+            from BankTransaction c
+            where c.transactionStatus in :statuses
+            and c.account.user.userId = :userId
+            """)
+    long countByTransactionStatusInAndUserId(@Param("statuses") Collection<String> statuses, @Param("userId") Long userId);
+
+    @EntityGraph(attributePaths = {"account", "account.user"})
     List<Transaction> findTop5ByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId);
 
-    @EntityGraph(attributePaths = "account")
+    @EntityGraph(attributePaths = {"account", "account.user"})
     List<Transaction> findByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId);
 
-    @EntityGraph(attributePaths = "account")
+    @EntityGraph(attributePaths = {"account", "account.user"})
     Page<Transaction> findByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"account", "account.user"})
+    List<Transaction> findByTransactionStatusInOrderByTransactionDateTimeDesc(Collection<String> statuses);
 }

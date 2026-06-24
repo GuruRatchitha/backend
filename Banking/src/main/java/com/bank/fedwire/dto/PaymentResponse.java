@@ -38,18 +38,6 @@ public class PaymentResponse {
 
     private String endToEndId;
 
-    private String fromMmbId;
-
-    private String toMmbId;
-
-    private String instgAgtMmbId;
-
-    private String instdAgtMmbId;
-
-    private String dbtrAgtMmbId;
-
-    private String cdtrAgtMmbId;
-
     private BigDecimal amount;
 
     private String currency;

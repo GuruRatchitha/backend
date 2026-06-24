@@ -56,10 +56,6 @@ public class IdGenerationService {
         return generateUniqueAlphanumericHyphenId("TX");
     }
 
-    public String generateMemberId() {
-        return String.format("%09d", nextSequenceValue());
-    }
-
     private String randomUpperAlphanumeric(int length) {
         StringBuilder value = new StringBuilder(length);
         for (int index = 0; index < length; index++) {

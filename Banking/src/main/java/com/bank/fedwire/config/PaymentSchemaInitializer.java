@@ -36,6 +36,9 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         addColumnIfMissing("transactions", "bank_transaction_id", "ALTER TABLE transactions ADD COLUMN bank_transaction_id VARCHAR(22) NULL");
         addColumnIfMissing("transactions", "beneficiary_account_number", "ALTER TABLE transactions ADD COLUMN beneficiary_account_number VARCHAR(255) NULL");
         addColumnIfMissing("transactions", "beneficiary_routing_number", "ALTER TABLE transactions ADD COLUMN beneficiary_routing_number VARCHAR(255) NULL");
+        addColumnIfMissing("transactions", "pending_payment_key", "ALTER TABLE transactions ADD COLUMN pending_payment_key VARCHAR(64) NULL");
+        addUniqueIndexIfMissing("transactions", "uk_transactions_pending_payment_key",
+                "ALTER TABLE transactions ADD CONSTRAINT uk_transactions_pending_payment_key UNIQUE (pending_payment_key)");
     }
 
     private void ensurePaymentMessageTables() {
@@ -49,12 +52,14 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
 
     private void ensurePacs008Columns() {
         addColumnIfMissing("pacs008", "tx_id", "ALTER TABLE pacs008 ADD COLUMN tx_id VARCHAR(35) NOT NULL DEFAULT '' AFTER instruction_id");
-        addColumnIfMissing("pacs008", "from_mmb_id", "ALTER TABLE pacs008 ADD COLUMN from_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER tx_id");
-        addColumnIfMissing("pacs008", "to_mmb_id", "ALTER TABLE pacs008 ADD COLUMN to_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER from_mmb_id");
-        addColumnIfMissing("pacs008", "instg_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN instg_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER to_mmb_id");
-        addColumnIfMissing("pacs008", "instd_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN instd_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER instg_agt_mmb_id");
-        addColumnIfMissing("pacs008", "dbtr_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN dbtr_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER instd_agt_mmb_id");
-        addColumnIfMissing("pacs008", "cdtr_agt_mmb_id", "ALTER TABLE pacs008 ADD COLUMN cdtr_agt_mmb_id VARCHAR(9) NOT NULL DEFAULT '' AFTER dbtr_agt_mmb_id");
+        dropColumnIfExists("pacs008", "from_mmb_id", "ALTER TABLE pacs008 DROP COLUMN from_mmb_id");
+        dropColumnIfExists("pacs008", "to_mmb_id", "ALTER TABLE pacs008 DROP COLUMN to_mmb_id");
+        dropColumnIfExists("pacs008", "instg_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN instg_agt_mmb_id");
+        dropColumnIfExists("pacs008", "instd_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN instd_agt_mmb_id");
+        dropColumnIfExists("pacs008", "dbtr_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN dbtr_agt_mmb_id");
+        dropColumnIfExists("pacs008", "cdtr_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN cdtr_agt_mmb_id");
+        addUniqueIndexIfMissing("pacs008", "uk_pacs008_transaction_id",
+                "ALTER TABLE pacs008 ADD CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)");
     }
 
     private void recreatePaymentMessageTables() {
@@ -85,12 +90,6 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                     transfer_id VARCHAR(35) NOT NULL,
                     instruction_id VARCHAR(35) NOT NULL,
                     tx_id VARCHAR(35) NOT NULL,
-                    from_mmb_id VARCHAR(9) NOT NULL,
-                    to_mmb_id VARCHAR(9) NOT NULL,
-                    instg_agt_mmb_id VARCHAR(9) NOT NULL,
-                    instd_agt_mmb_id VARCHAR(9) NOT NULL,
-                    dbtr_agt_mmb_id VARCHAR(9) NOT NULL,
-                    cdtr_agt_mmb_id VARCHAR(9) NOT NULL,
                     end_to_end_id VARCHAR(10) NOT NULL,
                     uetr VARCHAR(36) NOT NULL,
                     payment_transaction_id VARCHAR(35) NOT NULL,
@@ -111,7 +110,8 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                     local_instrument VARCHAR(4) NOT NULL,
                     xml_payload TEXT NULL,
                     created_date DATETIME(6) NOT NULL,
-                    PRIMARY KEY (pacs008_id)
+                    PRIMARY KEY (pacs008_id),
+                    CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)
                 )
                 """);
 
@@ -149,6 +149,12 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         }
     }
 
+    private void dropColumnIfExists(String tableName, String columnName, String ddl) {
+        if (columnExists(tableName, columnName)) {
+            jdbcTemplate.execute(ddl);
+        }
+    }
+
     private boolean tableExists(String tableName) {
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -167,6 +173,23 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                   AND TABLE_NAME = ?
                   AND COLUMN_NAME = ?
                 """, Integer.class, tableName, columnName);
+        return count != null && count > 0;
+    }
+
+    private void addUniqueIndexIfMissing(String tableName, String indexName, String ddl) {
+        if (!indexExists(tableName, indexName)) {
+            jdbcTemplate.execute(ddl);
+        }
+    }
+
+    private boolean indexExists(String tableName, String indexName) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND INDEX_NAME = ?
+                """, Integer.class, tableName, indexName);
         return count != null && count > 0;
     }
 

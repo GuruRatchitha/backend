@@ -29,12 +29,6 @@ CREATE TABLE pacs008 (
     transfer_id VARCHAR(35) NOT NULL,
     instruction_id VARCHAR(35) NOT NULL,
     tx_id VARCHAR(35) NOT NULL,
-    from_mmb_id VARCHAR(9) NOT NULL,
-    to_mmb_id VARCHAR(9) NOT NULL,
-    instg_agt_mmb_id VARCHAR(9) NOT NULL,
-    instd_agt_mmb_id VARCHAR(9) NOT NULL,
-    dbtr_agt_mmb_id VARCHAR(9) NOT NULL,
-    cdtr_agt_mmb_id VARCHAR(9) NOT NULL,
     end_to_end_id VARCHAR(10) NOT NULL,
     uetr VARCHAR(36) NOT NULL,
     payment_transaction_id VARCHAR(35) NOT NULL,
@@ -55,7 +49,8 @@ CREATE TABLE pacs008 (
     local_instrument VARCHAR(4) NOT NULL,
     xml_payload TEXT NULL,
     created_date DATETIME(6) NOT NULL,
-    PRIMARY KEY (pacs008_id)
+    PRIMARY KEY (pacs008_id),
+    CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)
 );
 
 CREATE TABLE pacs002 (
