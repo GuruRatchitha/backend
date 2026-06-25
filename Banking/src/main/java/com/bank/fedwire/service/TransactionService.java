@@ -20,5 +20,5 @@ public interface TransactionService {
 
     TransactionDetailResponse rejectTransaction(Long transactionId);
 
-    String approveTransaction(Long transactionId);
+    TransactionDetailResponse approveTransaction(Long transactionId);
 }

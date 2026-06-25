@@ -22,6 +22,8 @@ public interface BeneficiaryRepository extends JpaRepository<Beneficiary, Long> 
 
     Optional<Beneficiary> findByUserIdAndAccountNumberAndRoutingNumber(Long userId, String accountNumber, String routingNumber);
 
+    Optional<Beneficiary> findByAccountNumberAndRoutingNumber(String accountNumber, String routingNumber);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from Beneficiary b where b.beneficiaryId = :beneficiaryId")
     Optional<Beneficiary> findByIdForPaymentUpdate(@Param("beneficiaryId") Long beneficiaryId);
