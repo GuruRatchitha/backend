@@ -55,11 +55,7 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional(readOnly = true)
     public List<EmployeeTransactionQueueResponse> getEmployeeTransactionQueue() {
-        return transactionRepository.findByTransactionStatusInOrderByTransactionDateTimeDesc(
-                        List.of(STATUS_PENDING, STATUS_ON_HOLD))
-                .stream()
-                .map(this::toEmployeeTransactionQueueResponse)
-                .toList();
+        return transactionRepository.findEmployeeTransactionQueue();
     }
 
     @Override
@@ -137,21 +133,6 @@ public class TransactionServiceImpl implements TransactionService {
                 .transactionDate(transaction.getTransactionDateTime())
                 .accountNumber(transaction.getAccountNumber())
                 .accountType(account != null ? account.getAccountType() : null)
-                .build();
-    }
-
-    private EmployeeTransactionQueueResponse toEmployeeTransactionQueueResponse(Transaction transaction) {
-        Account account = transaction.getAccount();
-        String senderName = account != null && account.getUser() != null ? account.getUser().getUserName() : null;
-
-        return EmployeeTransactionQueueResponse.builder()
-                .transactionId(transaction.getTransactionId())
-                .transactionReference(String.valueOf(transaction.getTransactionId()))
-                .senderName(senderName)
-                .beneficiaryName(transaction.getBeneficiaryName())
-                .amount(transaction.getAmount())
-                .status(transaction.getTransactionStatus())
-                .paymentDate(transaction.getTransactionDateTime())
                 .build();
     }
 

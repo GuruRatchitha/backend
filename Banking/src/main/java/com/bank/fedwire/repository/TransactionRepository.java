@@ -50,6 +50,20 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @EntityGraph(attributePaths = {"account", "account.user"})
     Page<Transaction> findByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"account", "account.user"})
-    List<Transaction> findByTransactionStatusInOrderByTransactionDateTimeDesc(Collection<String> statuses);
+    @Query("""
+            select new com.bank.fedwire.dto.EmployeeTransactionQueueResponse(
+                    t.transactionId,
+                    t.transferId,
+                    u.userName,
+                    t.beneficiaryName,
+                    t.amount,
+                    t.transactionStatus,
+                    t.transactionDateTime
+            )
+            from BankTransaction t
+            left join t.account a
+            left join a.user u
+            order by t.transactionDateTime desc
+            """)
+    List<com.bank.fedwire.dto.EmployeeTransactionQueueResponse> findEmployeeTransactionQueue();
 }
