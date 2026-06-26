@@ -9,8 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -36,23 +36,23 @@ public class EmployeeTransactionController {
         return ResponseEntity.ok(transactionService.getEmployeeTransactionDetails(transactionId));
     }
 
-    @GetMapping(value = "/{transactionId}/pacs008", produces = MediaType.APPLICATION_XML_VALUE)
+    @GetMapping(value = {"/{transactionId}/xml", "/{transactionId}/pacs008"}, produces = MediaType.APPLICATION_XML_VALUE)
     public ResponseEntity<String> getPacs008Xml(@PathVariable Long transactionId) {
         return ResponseEntity.ok(transactionService.getEmployeeTransactionPacs008Xml(transactionId));
     }
 
-    @PutMapping("/{transactionId}/hold")
-    public ResponseEntity<TransactionDetailResponse> holdTransaction(@PathVariable Long transactionId) {
-        return ResponseEntity.ok(transactionService.holdTransaction(transactionId));
+    @RequestMapping(value = "/{transactionId}/approve", method = {RequestMethod.POST, RequestMethod.PUT})
+    public ResponseEntity<TransactionDetailResponse> approveTransaction(@PathVariable Long transactionId) {
+        return ResponseEntity.ok(transactionService.approveTransaction(transactionId));
     }
 
-    @PutMapping("/{transactionId}/reject")
+    @RequestMapping(value = "/{transactionId}/reject", method = {RequestMethod.POST, RequestMethod.PUT})
     public ResponseEntity<TransactionDetailResponse> rejectTransaction(@PathVariable Long transactionId) {
         return ResponseEntity.ok(transactionService.rejectTransaction(transactionId));
     }
 
-    @PutMapping(value = "/{transactionId}/approve", produces = MediaType.APPLICATION_XML_VALUE)
-    public ResponseEntity<String> approveTransaction(@PathVariable Long transactionId) {
-        return ResponseEntity.ok(transactionService.approveTransaction(transactionId));
+    @RequestMapping(value = "/{transactionId}/hold", method = RequestMethod.PUT)
+    public ResponseEntity<TransactionDetailResponse> holdTransaction(@PathVariable Long transactionId) {
+        return ResponseEntity.ok(transactionService.holdTransaction(transactionId));
     }
 }

@@ -18,9 +18,9 @@ public class TransactionDetailResponse {
 
     private Long transactionId;
 
-    private PartyDetails senderDetails;
+    private SenderDetails senderDetails;
 
-    private PartyDetails receiverDetails;
+    private ReceiverDetails receiverDetails;
 
     private PaymentDetails paymentDetails;
 
@@ -29,11 +29,25 @@ public class TransactionDetailResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     @Builder
-    public static class PartyDetails {
-        private String name;
-        private String accountNumber;
-        private String routingNumber;
-        private String bankName;
+    public static class SenderDetails {
+        private String senderName;
+        private String senderAccountNumber;
+        private String senderRoutingNumber;
+        private String senderBankName;
+        private String senderCountry;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ReceiverDetails {
+        private String receiverName;
+        private String receiverAccountNumber;
+        private String receiverRoutingNumber;
+        private String receiverBankName;
+        private String receiverCountry;
     }
 
     @Getter

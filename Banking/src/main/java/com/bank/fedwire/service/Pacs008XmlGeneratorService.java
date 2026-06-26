@@ -41,6 +41,7 @@ public class Pacs008XmlGeneratorService {
     private static final String APP_HEADER_SCHEMA = "BusinessApplicationHeader_head_001_001_03.xsd";
     private static final String PACS_SCHEMA =
             "Fedwire_Funds_Service_Release_2025_CustomerCreditTransfer_pacs_008_001_08_20240708_1351_iso15enriched.xsd";
+    private static final String STATUS_APPROVED = "APPROVED";
 
     private final PACS008Repository pacs008Repository;
 
@@ -55,6 +56,13 @@ public class Pacs008XmlGeneratorService {
                         HttpStatus.NOT_FOUND,
                         "PACS008 record not found for transactionId " + transactionId
                                 + ". Generate XML only for transactions created through POST /api/payments."));
+
+        Transaction transaction = pacs008.getTransaction();
+        if (transaction == null || !STATUS_APPROVED.equalsIgnoreCase(transaction.getTransactionStatus())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "PACS008 XML can only be generated for APPROVED transactions");
+        }
 
         if (pacs008.getXmlPayload() != null && !pacs008.getXmlPayload().isBlank()) {
             return pacs008.getXmlPayload();
