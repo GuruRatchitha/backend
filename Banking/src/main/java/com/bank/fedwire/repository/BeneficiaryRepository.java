@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 @Repository
@@ -19,6 +20,8 @@ public interface BeneficiaryRepository extends JpaRepository<Beneficiary, Long> 
     List<Beneficiary> findByUserIdOrderByCreatedDateDesc(Long userId);
 
     List<Beneficiary> findByStatusOrderByCreatedDateDesc(String status);
+
+    List<Beneficiary> findByStatusInOrderByCreatedDateDesc(Collection<String> statuses);
 
     Optional<Beneficiary> findByUserIdAndAccountNumberAndRoutingNumber(Long userId, String accountNumber, String routingNumber);
 

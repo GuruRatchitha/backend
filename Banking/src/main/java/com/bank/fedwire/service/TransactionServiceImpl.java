@@ -8,9 +8,11 @@ import com.bank.fedwire.entity.Account;
 import com.bank.fedwire.entity.MessageHeader;
 import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.entity.User;
+import com.bank.fedwire.event.Pacs008ApprovedEvent;
 import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
+import com.bank.fedwire.repository.PACS002Repository;
 import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,9 +21,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -39,8 +43,10 @@ public class TransactionServiceImpl implements TransactionService {
     private final AccountRepository accountRepository;
     private final BeneficiaryRepository beneficiaryRepository;
     private final MessageHeaderRepository messageHeaderRepository;
+    private final PACS002Repository pacs002Repository;
     private final PACS008Repository pacs008Repository;
     private final Pacs008XmlGeneratorService pacs008XmlGeneratorService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -104,24 +110,39 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<String> findEmployeeTransactionPacs002Xml(Long transactionId) {
+        if (transactionId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "transactionId is required");
+        }
+
+        return pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(transactionId)
+                .map(pacs002 -> pacs002.getXmlPayload())
+                .filter(xml -> xml != null && !xml.isBlank());
+    }
+
+    @Override
     @Transactional
     public TransactionDetailResponse holdTransaction(Long transactionId) {
-        return updateEmployeeTransactionStatus(transactionId, STATUS_ON_HOLD, false);
+        return updateEmployeeTransactionStatus(transactionId, STATUS_ON_HOLD);
     }
 
     @Override
     @Transactional
     public TransactionDetailResponse rejectTransaction(Long transactionId) {
-        return updateEmployeeTransactionStatus(transactionId, STATUS_REJECTED, false);
+        return updateEmployeeTransactionStatus(transactionId, STATUS_REJECTED);
     }
 
     @Override
     @Transactional
     public TransactionDetailResponse approveTransaction(Long transactionId) {
-        return updateEmployeeTransactionStatus(transactionId, STATUS_APPROVED, true);
+        TransactionDetailResponse response = updateEmployeeTransactionStatus(transactionId, STATUS_APPROVED);
+        pacs008XmlGeneratorService.generateXml(transactionId);
+        applicationEventPublisher.publishEvent(new Pacs008ApprovedEvent(transactionId));
+        return response;
     }
 
-    private TransactionDetailResponse updateEmployeeTransactionStatus(Long transactionId, String status, boolean generateXml) {
+    private TransactionDetailResponse updateEmployeeTransactionStatus(Long transactionId, String status) {
         if (transactionId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "transactionId is required");
         }
@@ -147,9 +168,6 @@ public class TransactionServiceImpl implements TransactionService {
             messageHeader.setMessageStatus(status);
             messageHeaderRepository.saveAndFlush(messageHeader);
 
-            if (generateXml && STATUS_APPROVED.equalsIgnoreCase(status)) {
-                pacs008XmlGeneratorService.generateXml(transactionId);
-            }
         }
 
         return toEmployeeTransactionDetailResponse(transaction);

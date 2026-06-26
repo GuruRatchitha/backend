@@ -5,6 +5,7 @@ import com.bank.fedwire.dto.EmployeeTransactionQueueResponse;
 import com.bank.fedwire.dto.TransactionDetailResponse;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface TransactionService {
 
@@ -15,6 +16,8 @@ public interface TransactionService {
     TransactionDetailResponse getEmployeeTransactionDetails(Long transactionId);
 
     String getEmployeeTransactionPacs008Xml(Long transactionId);
+
+    Optional<String> findEmployeeTransactionPacs002Xml(Long transactionId);
 
     TransactionDetailResponse holdTransaction(Long transactionId);
 

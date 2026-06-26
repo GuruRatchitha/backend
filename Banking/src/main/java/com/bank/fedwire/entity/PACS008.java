@@ -110,6 +110,12 @@ public class PACS008 {
     @Column(name = "xml_payload", columnDefinition = "TEXT")
     private String xmlPayload;
 
+    @Column(name = "sqs_published_at")
+    private LocalDateTime sqsPublishedAt;
+
+    @Column(name = "sqs_message_id", length = 128)
+    private String sqsMessageId;
+
     @Column(name = "created_date", nullable = false)
     private LocalDateTime createdDate;
 

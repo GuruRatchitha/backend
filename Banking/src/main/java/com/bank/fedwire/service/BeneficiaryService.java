@@ -14,6 +14,12 @@ public interface BeneficiaryService {
 
     List<BeneficiaryResponse> getPendingBeneficiaries();
 
+    List<BeneficiaryResponse> getApprovedBeneficiaries();
+
+    List<BeneficiaryResponse> getRejectedBeneficiaries();
+
+    List<BeneficiaryResponse> getBeneficiariesByStatus(String status);
+
     BeneficiaryCreateResponse approveBeneficiary(Long userId, String accountNumber, String routingNumber);
 
     BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber, String rejectionReason);

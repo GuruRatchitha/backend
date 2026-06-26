@@ -14,3 +14,12 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
+
+# Placeholder AWS settings for local development.
+# Replace these values with the real AWS region, credentials, topic ARN, and queue URL in non-local environments.
+aws:
+  access-key:${AWS_ACCESS_KEY}
+  secret-key:${AWS_SECRET_KEY}
+  region: us-east-2
+  topic-arn:
+  pacs002-queue-url:

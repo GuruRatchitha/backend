@@ -22,6 +22,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @EntityGraph(attributePaths = {"account", "account.user"})
     Optional<Transaction> findByTransactionId(Long transactionId);
 
+    @EntityGraph(attributePaths = {"account", "account.user"})
+    Optional<Transaction> findByTransferId(String transferId);
+
     @Query("select count(t) from BankTransaction t where t.transactionStatus = :#{#status.name()}")
     long countByStatus(@Param("status") TransactionStatus status);
 

@@ -4,6 +4,7 @@ import com.bank.fedwire.dto.TransactionDetailResponse;
 import com.bank.fedwire.dto.EmployeeTransactionQueueResponse;
 import com.bank.fedwire.service.TransactionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -39,6 +40,17 @@ public class EmployeeTransactionController {
     @GetMapping(value = {"/{transactionId}/xml", "/{transactionId}/pacs008"}, produces = MediaType.APPLICATION_XML_VALUE)
     public ResponseEntity<String> getPacs008Xml(@PathVariable Long transactionId) {
         return ResponseEntity.ok(transactionService.getEmployeeTransactionPacs008Xml(transactionId));
+    }
+
+    @GetMapping("/{transactionId}/pacs002")
+    public ResponseEntity<String> getPacs002Xml(@PathVariable Long transactionId) {
+        return transactionService.findEmployeeTransactionPacs002Xml(transactionId)
+                .map(xml -> ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_XML)
+                        .body(xml))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body("PACS002 response has not been received yet."));
     }
 
     @RequestMapping(value = "/{transactionId}/approve", method = {RequestMethod.POST, RequestMethod.PUT})

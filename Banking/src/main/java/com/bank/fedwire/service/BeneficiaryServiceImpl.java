@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -69,6 +70,39 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         return beneficiaryRepository.findByStatusOrderByCreatedDateDesc("PENDING").stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BeneficiaryResponse> getApprovedBeneficiaries() {
+        return beneficiaryRepository.findByStatusInOrderByCreatedDateDesc(List.of("ACTIVE", "APPROVED")).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BeneficiaryResponse> getRejectedBeneficiaries() {
+        return beneficiaryRepository.findByStatusOrderByCreatedDateDesc("REJECTED").stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BeneficiaryResponse> getBeneficiariesByStatus(String status) {
+        if (status == null || status.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status is required");
+        }
+
+        String normalized = status.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "pending" -> getPendingBeneficiaries();
+            case "approved" -> getApprovedBeneficiaries();
+            case "rejected" -> getRejectedBeneficiaries();
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "status must be pending, approved, or rejected");
+        };
     }
 
     @Override

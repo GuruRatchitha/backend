@@ -16,6 +16,7 @@ import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Service
 @RequiredArgsConstructor
@@ -36,8 +37,12 @@ public class Pacs008XmlGeneratorService {
     private static final String CLEARING_SYSTEM_MEMBER_CODE = "USABA";
     private static final String FROM_MEMBER_ID = "653060219";
     private static final String TO_MEMBER_ID = "021151080";
+    private static final String CREDITOR_ROUTING_NUMBER = "321171184";
+    private static final String DEBTOR_ROUTING_NUMBER = "091409571";
+    private static final String CREDITOR_ACCOUNT_ID = "33333333330";
     private static final String LOCAL_INSTRUMENT = "CTRC";
     private static final String CHARGE_BEARER = "DEBT";
+    private static final DateTimeFormatter ISO_LOCAL_DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final String APP_HEADER_SCHEMA = "BusinessApplicationHeader_head_001_001_03.xsd";
     private static final String PACS_SCHEMA =
             "Fedwire_Funds_Service_Release_2025_CustomerCreditTransfer_pacs_008_001_08_20240708_1351_iso15enriched.xsd";
@@ -165,12 +170,12 @@ public class Pacs008XmlGeneratorService {
         writeAgent(writer, "InstdAgt", beneficiaryRoutingNumber, null, null, null);
         writeParty(writer, "Dbtr", pacs008.getDebtorName(), pacs008.getDebtorTown(), pacs008.getDebtorCountry());
         writeAccount(writer, "DbtrAcct", pacs008.getDebtorAccount());
-        writeAgent(writer, "DbtrAgt", senderRoutingNumber,
+        writeAgent(writer, "DbtrAgt", DEBTOR_ROUTING_NUMBER,
                 pacs008.getDebtorName(), pacs008.getDebtorTown(), pacs008.getDebtorCountry());
-        writeAgent(writer, "CdtrAgt", beneficiaryRoutingNumber,
+        writeAgent(writer, "CdtrAgt", CREDITOR_ROUTING_NUMBER,
                 pacs008.getCreditorName(), pacs008.getCreditorTown(), pacs008.getCreditorCountry());
         writeParty(writer, "Cdtr", pacs008.getCreditorName(), pacs008.getCreditorTown(), pacs008.getCreditorCountry());
-        writeAccount(writer, "CdtrAcct", pacs008.getCreditorAccount());
+        writeAccount(writer, "CdtrAcct", CREDITOR_ACCOUNT_ID);
         writer.writeEndElement();
     }
 
@@ -272,7 +277,7 @@ public class Pacs008XmlGeneratorService {
     }
 
     private String formatDateTime(LocalDateTime value, String fieldName) {
-        return require(value, fieldName).toString();
+        return require(value, fieldName).format(ISO_LOCAL_DATE_TIME);
     }
 
     private String resolveBeneficiaryRoutingNumber(PACS008 pacs008) {

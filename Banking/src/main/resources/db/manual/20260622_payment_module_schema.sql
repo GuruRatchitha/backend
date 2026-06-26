@@ -41,6 +41,14 @@ ALTER TABLE transactions
 
 -- The payment module stores message_id as the generated BizMsgIdr/MsgId string.
 -- If you do not need old message_header/pacs008 data, clearing these two tables is the cleanest migration.
+CREATE TABLE IF NOT EXISTS business_message_sequence (
+    sequence_date DATE NOT NULL,
+    sequence_value INT NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (sequence_date)
+);
+
 SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE pacs008;
 TRUNCATE TABLE message_header;
@@ -78,6 +86,8 @@ CREATE TABLE pacs008 (
     charge_bearer VARCHAR(4) NOT NULL,
     local_instrument VARCHAR(4) NOT NULL,
     xml_payload TEXT NULL,
+    sqs_published_at DATETIME(6) NULL,
+    sqs_message_id VARCHAR(128) NULL,
     created_date DATETIME(6) NOT NULL,
     PRIMARY KEY (pacs008_id),
     CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)

@@ -17,6 +17,7 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         ensureUserColumns();
         ensureBeneficiaryIdColumn();
         ensureTransactionColumns();
+        ensureBusinessMessageSequenceTable();
         ensurePaymentMessageTables();
     }
 
@@ -48,10 +49,13 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         }
 
         ensurePacs008Columns();
+        ensurePacs002Columns();
     }
 
     private void ensurePacs008Columns() {
         addColumnIfMissing("pacs008", "tx_id", "ALTER TABLE pacs008 ADD COLUMN tx_id VARCHAR(35) NOT NULL DEFAULT '' AFTER instruction_id");
+        addColumnIfMissing("pacs008", "sqs_published_at", "ALTER TABLE pacs008 ADD COLUMN sqs_published_at DATETIME(6) NULL AFTER xml_payload");
+        addColumnIfMissing("pacs008", "sqs_message_id", "ALTER TABLE pacs008 ADD COLUMN sqs_message_id VARCHAR(128) NULL AFTER sqs_published_at");
         dropColumnIfExists("pacs008", "from_mmb_id", "ALTER TABLE pacs008 DROP COLUMN from_mmb_id");
         dropColumnIfExists("pacs008", "to_mmb_id", "ALTER TABLE pacs008 DROP COLUMN to_mmb_id");
         dropColumnIfExists("pacs008", "instg_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN instg_agt_mmb_id");
@@ -60,6 +64,26 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         dropColumnIfExists("pacs008", "cdtr_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN cdtr_agt_mmb_id");
         addUniqueIndexIfMissing("pacs008", "uk_pacs008_transaction_id",
                 "ALTER TABLE pacs008 ADD CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)");
+    }
+
+    private void ensureBusinessMessageSequenceTable() {
+        if (!tableExists("business_message_sequence")) {
+            jdbcTemplate.execute("""
+                    CREATE TABLE business_message_sequence (
+                        sequence_date DATE NOT NULL,
+                        sequence_value INT NOT NULL,
+                        created_at DATETIME(6) NOT NULL,
+                        updated_at DATETIME(6) NOT NULL,
+                        PRIMARY KEY (sequence_date)
+                    )
+                    """);
+        }
+    }
+
+    private void ensurePacs002Columns() {
+        addColumnIfMissing("pacs002", "message_id", "ALTER TABLE pacs002 ADD COLUMN message_id VARCHAR(22) NULL AFTER original_message_id");
+        addColumnIfMissing("pacs002", "transfer_id", "ALTER TABLE pacs002 ADD COLUMN transfer_id VARCHAR(35) NULL AFTER message_id");
+        addColumnIfMissing("pacs002", "received_timestamp", "ALTER TABLE pacs002 ADD COLUMN received_timestamp DATETIME(6) NULL AFTER transaction_id");
     }
 
     private void recreatePaymentMessageTables() {
@@ -109,6 +133,8 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                     charge_bearer VARCHAR(4) NOT NULL,
                     local_instrument VARCHAR(4) NOT NULL,
                     xml_payload TEXT NULL,
+                    sqs_published_at DATETIME(6) NULL,
+                    sqs_message_id VARCHAR(128) NULL,
                     created_date DATETIME(6) NOT NULL,
                     PRIMARY KEY (pacs008_id),
                     CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)
@@ -119,11 +145,13 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                 CREATE TABLE pacs002 (
                     pacs002_id BIGINT NOT NULL AUTO_INCREMENT,
                     original_message_id VARCHAR(255) NULL,
+                    message_id VARCHAR(22) NULL,
+                    transfer_id VARCHAR(35) NULL,
                     transaction_status VARCHAR(255) NULL,
                     reason_code VARCHAR(255) NULL,
                     xml_payload TEXT NULL,
                     transaction_id BIGINT NULL,
-                    message_id VARCHAR(22) NULL,
+                    received_timestamp DATETIME(6) NULL,
                     PRIMARY KEY (pacs002_id)
                 )
                 """);
