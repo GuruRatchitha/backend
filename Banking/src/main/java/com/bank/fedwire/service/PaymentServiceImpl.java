@@ -74,10 +74,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
 
+        String messageId = idGenerationService.generateBusinessMessageId();
         String transferId = idGenerationService.generateTransferId();
         String paymentTransactionId = idGenerationService.generatePaymentTransactionId();
         String bankTransactionId = idGenerationService.generateBankTransactionId();
-        String messageId = idGenerationService.generateMessageId();
 
         Transaction transaction = transactionRepository.save(Transaction.builder()
                 .transferId(transferId)

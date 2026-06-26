@@ -6,6 +6,14 @@ USE dev_db;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+CREATE TABLE IF NOT EXISTS business_message_sequence (
+    sequence_date DATE NOT NULL,
+    sequence_value INT NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (sequence_date)
+);
+
 DROP TABLE IF EXISTS pacs008;
 DROP TABLE IF EXISTS pacs002;
 DROP TABLE IF EXISTS adm002;
@@ -48,6 +56,8 @@ CREATE TABLE pacs008 (
     charge_bearer VARCHAR(4) NOT NULL,
     local_instrument VARCHAR(4) NOT NULL,
     xml_payload TEXT NULL,
+    sqs_published_at DATETIME(6) NULL,
+    sqs_message_id VARCHAR(128) NULL,
     created_date DATETIME(6) NOT NULL,
     PRIMARY KEY (pacs008_id),
     CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)
@@ -56,11 +66,13 @@ CREATE TABLE pacs008 (
 CREATE TABLE pacs002 (
     pacs002_id BIGINT NOT NULL AUTO_INCREMENT,
     original_message_id VARCHAR(255) NULL,
+    message_id VARCHAR(22) NULL,
+    transfer_id VARCHAR(35) NULL,
     transaction_status VARCHAR(255) NULL,
     reason_code VARCHAR(255) NULL,
     xml_payload TEXT NULL,
     transaction_id BIGINT NULL,
-    message_id VARCHAR(22) NULL,
+    received_timestamp DATETIME(6) NULL,
     PRIMARY KEY (pacs002_id)
 );
 

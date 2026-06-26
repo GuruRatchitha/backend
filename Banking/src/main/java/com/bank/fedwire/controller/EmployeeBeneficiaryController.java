@@ -28,7 +28,22 @@ public class EmployeeBeneficiaryController {
 
     @GetMapping("/pending")
     public ResponseEntity<List<BeneficiaryResponse>> getPendingBeneficiaries() {
-        return ResponseEntity.ok(beneficiaryService.getPendingBeneficiaries());
+        return ResponseEntity.ok(beneficiaryService.getBeneficiariesByStatus("pending"));
+    }
+
+    @GetMapping("/approved")
+    public ResponseEntity<List<BeneficiaryResponse>> getApprovedBeneficiaries() {
+        return ResponseEntity.ok(beneficiaryService.getBeneficiariesByStatus("approved"));
+    }
+
+    @GetMapping("/rejected")
+    public ResponseEntity<List<BeneficiaryResponse>> getRejectedBeneficiaries() {
+        return ResponseEntity.ok(beneficiaryService.getBeneficiariesByStatus("rejected"));
+    }
+
+    @GetMapping("/{status}")
+    public ResponseEntity<List<BeneficiaryResponse>> getBeneficiariesByStatus(@PathVariable String status) {
+        return ResponseEntity.ok(beneficiaryService.getBeneficiariesByStatus(status));
     }
 
     @PutMapping("/{beneficiaryId}/approve")

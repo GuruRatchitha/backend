@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +42,12 @@ public interface BeneficiaryRepository extends JpaRepository<Beneficiary, Long> 
     List<com.bank.fedwire.dto.PendingBeneficiaryResponse> findPendingBeneficiaries(
             @Param("status") String status,
             Pageable pageable);
+
+    List<Beneficiary> findByStatusInOrderByCreatedDateDesc(Collection<String> statuses);
+
+    Optional<Beneficiary> findByUserIdAndAccountNumberAndRoutingNumber(Long userId, String accountNumber, String routingNumber);
+
+    Optional<Beneficiary> findByAccountNumberAndRoutingNumber(String accountNumber, String routingNumber);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from Beneficiary b where b.beneficiaryId = :beneficiaryId")

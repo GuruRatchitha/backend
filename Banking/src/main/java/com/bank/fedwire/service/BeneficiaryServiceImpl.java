@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -79,25 +80,91 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<BeneficiaryResponse> getApprovedBeneficiaries() {
+        return beneficiaryRepository.findByStatusInOrderByCreatedDateDesc(List.of("ACTIVE", "APPROVED")).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BeneficiaryResponse> getRejectedBeneficiaries() {
+        return beneficiaryRepository.findByStatusOrderByCreatedDateDesc("REJECTED").stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BeneficiaryResponse> getBeneficiariesByStatus(String status) {
+        if (status == null || status.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status is required");
+        }
+
+        String normalized = status.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "pending" -> getPendingBeneficiaries();
+            case "approved" -> getApprovedBeneficiaries();
+            case "rejected" -> getRejectedBeneficiaries();
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "status must be pending, approved, or rejected");
+        };
+    }
+
+    @Override
     @Transactional
     public BeneficiaryResponse approveBeneficiary(Long beneficiaryId) {
         Beneficiary beneficiary = getBeneficiaryForEmployeeAction(beneficiaryId);
-        beneficiary.setStatus(STATUS_APPROVED);
-        beneficiary.setRejectionReason(null);
-        Beneficiary savedBeneficiary = beneficiaryRepository.save(beneficiary);
+        Beneficiary savedBeneficiary = approveBeneficiaryRecord(beneficiary);
         logActivity("Beneficiary Approved", "Beneficiary " + savedBeneficiary.getBeneficiaryName() + " was approved.");
         return toResponse(savedBeneficiary);
     }
 
     @Override
     @Transactional
+    public BeneficiaryCreateResponse approveBeneficiary(Long userId, String accountNumber, String routingNumber) {
+        Beneficiary savedBeneficiary = approveBeneficiaryRecord(getBeneficiary(userId, accountNumber, routingNumber));
+
+        return BeneficiaryCreateResponse.builder()
+                .message("Beneficiary approved successfully")
+                .beneficiary(toResponse(savedBeneficiary))
+                .build();
+    }
+
+    @Override
+    @Transactional
     public BeneficiaryResponse rejectBeneficiary(Long beneficiaryId, String rejectionReason) {
         Beneficiary beneficiary = getBeneficiaryForEmployeeAction(beneficiaryId);
-        beneficiary.setStatus(STATUS_REJECTED);
-        beneficiary.setRejectionReason(normalizeRejectionReason(rejectionReason));
-        Beneficiary savedBeneficiary = beneficiaryRepository.save(beneficiary);
+        Beneficiary savedBeneficiary = rejectBeneficiaryRecord(beneficiary, rejectionReason);
         logActivity("Beneficiary Rejected", "Beneficiary " + savedBeneficiary.getBeneficiaryName() + " was rejected.");
         return toResponse(savedBeneficiary);
+    }
+
+    @Override
+    @Transactional
+    public BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber, String rejectionReason) {
+        requireText(rejectionReason, "rejectionReason is required");
+        Beneficiary savedBeneficiary = rejectBeneficiaryRecord(
+                getBeneficiary(userId, accountNumber, routingNumber),
+                rejectionReason);
+
+        return BeneficiaryCreateResponse.builder()
+                .message("Beneficiary rejected successfully")
+                .beneficiary(toResponse(savedBeneficiary))
+                .build();
+    }
+
+    private Beneficiary approveBeneficiaryRecord(Beneficiary beneficiary) {
+        beneficiary.setStatus(STATUS_APPROVED);
+        beneficiary.setRejectionReason(null);
+        return beneficiaryRepository.save(beneficiary);
+    }
+
+    private Beneficiary rejectBeneficiaryRecord(Beneficiary beneficiary, String rejectionReason) {
+        beneficiary.setStatus(STATUS_REJECTED);
+        beneficiary.setRejectionReason(normalizeRejectionReason(rejectionReason));
+        return beneficiaryRepository.save(beneficiary);
     }
 
     private Beneficiary getBeneficiaryForEmployeeAction(Long beneficiaryId) {
@@ -113,6 +180,15 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         }
 
         return beneficiary;
+    }
+
+    private Beneficiary getBeneficiary(Long userId, String accountNumber, String routingNumber) {
+        requireText(accountNumber, "accountNumber is required");
+        requireText(routingNumber, "routingNumber is required");
+
+        return beneficiaryRepository.findByUserIdAndAccountNumberAndRoutingNumber(
+                        userId, accountNumber.trim(), routingNumber.trim())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiary not found"));
     }
 
     private String normalizeRejectionReason(String rejectionReason) {

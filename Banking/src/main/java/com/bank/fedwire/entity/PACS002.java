@@ -3,6 +3,7 @@ package com.bank.fedwire.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -15,6 +16,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "pacs002")
@@ -29,10 +32,19 @@ public class PACS002 {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long pacs002Id;
 
+    @Column(name = "original_message_id")
     private String originalMessageId;
 
+    @Column(name = "message_id", length = 22)
+    private String messageId;
+
+    @Column(name = "transfer_id", length = 35)
+    private String transferId;
+
+    @Column(name = "transaction_status")
     private String transactionStatus;
 
+    @Column(name = "reason_code")
     private String reasonCode;
 
     @Lob
@@ -42,7 +54,16 @@ public class PACS002 {
     @Column(name = "transaction_id")
     private Long transactionId;
 
+    @Column(name = "received_timestamp")
+    private LocalDateTime receivedTimestamp;
+
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "message_id")
+    @JoinColumn(
+            name = "message_id",
+            referencedColumnName = "message_id",
+            insertable = false,
+            updatable = false,
+            foreignKey = @ForeignKey(value = jakarta.persistence.ConstraintMode.NO_CONSTRAINT)
+    )
     private MessageHeader messageHeader;
 }

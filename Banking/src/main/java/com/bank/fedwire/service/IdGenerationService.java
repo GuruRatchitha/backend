@@ -1,31 +1,35 @@
 package com.bank.fedwire.service;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.ZoneOffset;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
+@RequiredArgsConstructor
 public class IdGenerationService {
 
     private static final char[] UPPER_ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".toCharArray();
     private static final DateTimeFormatter BASIC_DATE = DateTimeFormatter.BASIC_ISO_DATE;
     private static final SecureRandom RANDOM = new SecureRandom();
-    private final AtomicInteger sequence = new AtomicInteger(0);
+    private final BusinessMessageSequenceService businessMessageSequenceService;
 
     public String generateBusinessMessageId() {
-        return generateMessageId();
+        return businessMessageSequenceService.nextBusinessMessageId();
     }
 
     public String generateMessageId() {
-        return LocalDate.now().format(BASIC_DATE) + randomUpperAlphanumeric(8) + nextSixDigitSequence();
+        return generateBusinessMessageId();
     }
 
     public String generateUniqueAlphanumericHyphenId(String prefix) {
-        return prefix + "-" + LocalDate.now().format(BASIC_DATE) + randomUpperAlphanumeric(8) + nextSixDigitSequence();
+        LocalDate businessDate = LocalDate.now(ZoneOffset.UTC);
+        return prefix + "-" + businessDate.format(BASIC_DATE)
+                + randomUpperAlphanumeric(8) + nextSixDigitSequence(businessDate);
     }
 
     public String generateUetr() {
@@ -45,7 +49,7 @@ public class IdGenerationService {
     }
 
     public String generateBankTransactionId() {
-        return generateMessageId();
+        return generateLegacyMessageId();
     }
 
     public String generateInstructionId() {
@@ -56,6 +60,11 @@ public class IdGenerationService {
         return generateUniqueAlphanumericHyphenId("TX");
     }
 
+    private String generateLegacyMessageId() {
+        LocalDate businessDate = LocalDate.now(ZoneOffset.UTC);
+        return businessDate.format(BASIC_DATE) + randomUpperAlphanumeric(8) + nextSixDigitSequence(businessDate);
+    }
+
     private String randomUpperAlphanumeric(int length) {
         StringBuilder value = new StringBuilder(length);
         for (int index = 0; index < length; index++) {
@@ -64,11 +73,11 @@ public class IdGenerationService {
         return value.toString();
     }
 
-    private String nextSixDigitSequence() {
-        return String.format("%06d", nextSequenceValue());
+    private String nextSixDigitSequence(LocalDate businessDate) {
+        return String.format("%06d", nextSequenceValue(businessDate));
     }
 
-    private int nextSequenceValue() {
-        return sequence.updateAndGet(current -> current >= 999999 ? 1 : current + 1);
+    private int nextSequenceValue(LocalDate businessDate) {
+        return businessMessageSequenceService.nextSequenceValue(businessDate);
     }
 }
