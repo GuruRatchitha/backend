@@ -5,6 +5,7 @@ import com.bank.fedwire.entity.PACS008;
 import com.bank.fedwire.repository.PACS008Repository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
+@ConditionalOnProperty(prefix = "aws", name = "messaging-enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class SnsPublisherService {

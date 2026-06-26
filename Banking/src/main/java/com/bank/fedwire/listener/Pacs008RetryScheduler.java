@@ -5,10 +5,12 @@ import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.service.SnsPublisherService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(prefix = "aws", name = "messaging-enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class Pacs008RetryScheduler {

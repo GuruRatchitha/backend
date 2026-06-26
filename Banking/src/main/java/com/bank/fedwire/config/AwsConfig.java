@@ -1,6 +1,7 @@
 package com.bank.fedwire.config;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -12,6 +13,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 
 @Configuration
 @EnableScheduling
+@ConditionalOnProperty(prefix = "aws", name = "messaging-enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class AwsConfig {
 

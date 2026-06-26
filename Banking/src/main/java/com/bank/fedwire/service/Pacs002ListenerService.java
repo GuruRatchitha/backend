@@ -3,6 +3,7 @@ package com.bank.fedwire.service;
 import com.bank.fedwire.config.AwsProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -12,6 +13,7 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
 
 @Service
+@ConditionalOnProperty(prefix = "aws", name = "messaging-enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class Pacs002ListenerService {

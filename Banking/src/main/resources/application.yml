@@ -4,7 +4,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://146.148.103.183:3306/dev_db}
     username: ${DB_USERNAME:usr_dev}
-    password: ${DB_PASSWORD:Dev#Pass2026$}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -18,8 +18,12 @@ spring:
 # Placeholder AWS settings for local development.
 # Replace these values with the real AWS region, credentials, topic ARN, and queue URL in non-local environments.
 aws:
-  access-key:${AWS_ACCESS_KEY}
-  secret-key:${AWS_SECRET_KEY}
-  region: us-east-2
-  topic-arn:
-  pacs002-queue-url:
+  messaging-enabled: ${AWS_MESSAGING_ENABLED:false}
+  access-key: ${AWS_ACCESS_KEY:}
+  secret-key: ${AWS_SECRET_KEY:}
+  region: ${AWS_REGION:us-east-2}
+  topic-arn: ${AWS_TOPIC_ARN:}
+  pacs002-queue-url: ${AWS_PACS002_QUEUE_URL:}
+  pacs002-poll-delay-ms: ${AWS_PACS002_POLL_DELAY_MS:5000}
+  sqs:
+    pacs008-retry-delay-ms: ${AWS_PACS008_RETRY_DELAY_MS:30000}
