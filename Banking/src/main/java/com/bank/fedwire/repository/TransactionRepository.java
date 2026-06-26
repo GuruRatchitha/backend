@@ -25,6 +25,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @Query("select count(t) from BankTransaction t where t.transactionStatus = :#{#status.name()}")
     long countByStatus(@Param("status") TransactionStatus status);
 
+    @Query("select count(t) from BankTransaction t where upper(t.transactionStatus) = upper(:status)")
+    long countByTransactionStatusIgnoreCase(@Param("status") String status);
+
     @Query("""
             select count(c)
             from BankTransaction c
@@ -46,6 +49,25 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     @EntityGraph(attributePaths = {"account", "account.user"})
     List<Transaction> findByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId);
+
+    @Query("""
+            select new com.bank.fedwire.dto.PendingTransactionResponse(
+                    t.transactionId,
+                    u.userName,
+                    t.amount,
+                    t.transactionType,
+                    t.transactionStatus,
+                    t.transactionDateTime
+            )
+            from BankTransaction t
+            left join t.account a
+            left join a.user u
+            where upper(t.transactionStatus) = upper(:status)
+            order by t.transactionDateTime desc
+            """)
+    List<com.bank.fedwire.dto.PendingTransactionResponse> findPendingTransactions(
+            @Param("status") String status,
+            Pageable pageable);
 
     @EntityGraph(attributePaths = {"account", "account.user"})
     Page<Transaction> findByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId, Pageable pageable);

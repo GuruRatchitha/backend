@@ -59,12 +59,15 @@ public class Beneficiary {
     @Column(name = "routing_number", nullable = false)
     private String routingNumber;
 
+    @Column(name = "bank_name")
+    private String bankName;
+
     @Column(name = "created_date", nullable = false, updatable = false)
     private LocalDateTime createdDate;
 
     @Builder.Default
     @Column(nullable = false, length = 8)
-    private String status = "PENDING";
+    private String status = "ACTIVE";
 
     @Column(name = "rejection_reason", length = 255)
     private String rejectionReason;
@@ -87,7 +90,10 @@ public class Beneficiary {
             countryCode = "US";
         }
         if (status == null || status.isBlank()) {
-            status = "PENDING";
+            status = "ACTIVE";
+        }
+        if (bankName == null || bankName.isBlank()) {
+            bankName = "N/A";
         }
         status = status.toUpperCase();
         if (!"PENDING".equals(status) && !"ACTIVE".equals(status) && !"APPROVED".equals(status)

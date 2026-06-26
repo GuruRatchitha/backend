@@ -32,6 +32,8 @@ public class BeneficiaryResponse {
 
     private String routingNumber;
 
+    private String bankName;
+
     private LocalDateTime createdDate;
 
     private String status;

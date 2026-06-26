@@ -2,6 +2,7 @@ package com.bank.fedwire.repository;
 
 import com.bank.fedwire.entity.Beneficiary;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -20,7 +21,26 @@ public interface BeneficiaryRepository extends JpaRepository<Beneficiary, Long> 
 
     List<Beneficiary> findByStatusOrderByCreatedDateDesc(String status);
 
-    Optional<Beneficiary> findByUserIdAndAccountNumberAndRoutingNumber(Long userId, String accountNumber, String routingNumber);
+    long countByStatusIgnoreCase(String status);
+
+    @Query("""
+            select new com.bank.fedwire.dto.PendingBeneficiaryResponse(
+                    b.beneficiaryId,
+                    u.userName,
+                    b.beneficiaryName,
+                    b.bankName,
+                    b.accountNumber,
+                    b.status,
+                    b.createdDate
+            )
+            from Beneficiary b
+            left join b.user u
+            where upper(b.status) = upper(:status)
+            order by b.createdDate desc
+            """)
+    List<com.bank.fedwire.dto.PendingBeneficiaryResponse> findPendingBeneficiaries(
+            @Param("status") String status,
+            Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from Beneficiary b where b.beneficiaryId = :beneficiaryId")

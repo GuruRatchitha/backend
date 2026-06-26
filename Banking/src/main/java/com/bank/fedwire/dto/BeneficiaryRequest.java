@@ -16,5 +16,7 @@ public class BeneficiaryRequest {
 //    private String confirmAccountNumber;
     private String routingNumber;
 
+    private String bankName;
+
     private String status;
 }

@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @Getter
 @Setter
@@ -16,13 +15,15 @@ import java.util.List;
 @Builder
 public class DashboardSummaryResponse {
 
-    private BigDecimal totalBalance;
+    private long totalCustomers;
 
-    private long accountCount;
+    private long totalAccounts;
 
-    private long completedTransactions;
+    private BigDecimal totalBankBalance;
+
+    private long pendingBeneficiaries;
 
     private long pendingTransactions;
 
-    private List<AccountSummary> accounts;
+    private long todayCustomers;
 }

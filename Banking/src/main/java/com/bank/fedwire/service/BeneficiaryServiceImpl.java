@@ -4,8 +4,10 @@ import com.bank.fedwire.dto.BeneficiaryCreateResponse;
 import com.bank.fedwire.dto.BeneficiaryRequest;
 import com.bank.fedwire.dto.BeneficiaryResponse;
 import com.bank.fedwire.entity.Beneficiary;
+import com.bank.fedwire.entity.DashboardActivity;
 import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.BeneficiaryRepository;
+import com.bank.fedwire.repository.DashboardActivityRepository;
 import com.bank.fedwire.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,8 +21,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BeneficiaryServiceImpl implements BeneficiaryService {
 
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_APPROVED = "APPROVED";
+    private static final String STATUS_REJECTED = "REJECTED";
+
     private final BeneficiaryRepository beneficiaryRepository;
     private final UserRepository userRepository;
+    private final DashboardActivityRepository dashboardActivityRepository;
 
     @Override
     @Transactional
@@ -43,8 +50,8 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
                 .countryCode("US")
                 .accountNumber(accountNumber)
                 .routingNumber(request.getRoutingNumber().trim())
-                // New customer beneficiaries must wait for employee approval before payment is enabled.
-                .status("PENDING")
+                .bankName(normalizeBankName(request.getBankName()))
+                .status(STATUS_PENDING)
                 .build();
 
         Beneficiary savedBeneficiary = beneficiaryRepository.save(beneficiary);
@@ -66,38 +73,59 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
     @Override
     @Transactional(readOnly = true)
     public List<BeneficiaryResponse> getPendingBeneficiaries() {
-        return beneficiaryRepository.findByStatusOrderByCreatedDateDesc("PENDING").stream()
+        return beneficiaryRepository.findByStatusOrderByCreatedDateDesc(STATUS_PENDING).stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Override
     @Transactional
-    public BeneficiaryCreateResponse approveBeneficiary(Long userId, String accountNumber, String routingNumber) {
-        Beneficiary beneficiary = getBeneficiary(userId, accountNumber, routingNumber);
-        beneficiary.setStatus("APPROVED");
+    public BeneficiaryResponse approveBeneficiary(Long beneficiaryId) {
+        Beneficiary beneficiary = getBeneficiaryForEmployeeAction(beneficiaryId);
+        beneficiary.setStatus(STATUS_APPROVED);
         beneficiary.setRejectionReason(null);
-
-        return BeneficiaryCreateResponse.builder()
-                .message("Beneficiary approved successfully")
-                .beneficiary(toResponse(beneficiaryRepository.save(beneficiary)))
-                .build();
+        Beneficiary savedBeneficiary = beneficiaryRepository.save(beneficiary);
+        logActivity("Beneficiary Approved", "Beneficiary " + savedBeneficiary.getBeneficiaryName() + " was approved.");
+        return toResponse(savedBeneficiary);
     }
 
     @Override
     @Transactional
-    public BeneficiaryCreateResponse rejectBeneficiary(Long userId, String accountNumber, String routingNumber, String rejectionReason) {
-        requireText(rejectionReason, "rejectionReason is required");
+    public BeneficiaryResponse rejectBeneficiary(Long beneficiaryId, String rejectionReason) {
+        Beneficiary beneficiary = getBeneficiaryForEmployeeAction(beneficiaryId);
+        beneficiary.setStatus(STATUS_REJECTED);
+        beneficiary.setRejectionReason(normalizeRejectionReason(rejectionReason));
+        Beneficiary savedBeneficiary = beneficiaryRepository.save(beneficiary);
+        logActivity("Beneficiary Rejected", "Beneficiary " + savedBeneficiary.getBeneficiaryName() + " was rejected.");
+        return toResponse(savedBeneficiary);
+    }
 
-        Beneficiary beneficiary = getBeneficiary(userId, accountNumber, routingNumber);
-        beneficiary.setStatus("REJECTED");
-        // Save the employee's rejection reason on the same beneficiary row for the customer list API.
-        beneficiary.setRejectionReason(rejectionReason.trim());
+    private Beneficiary getBeneficiaryForEmployeeAction(Long beneficiaryId) {
+        if (beneficiaryId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "beneficiaryId is required");
+        }
 
-        return BeneficiaryCreateResponse.builder()
-                .message("Beneficiary rejected successfully")
-                .beneficiary(toResponse(beneficiaryRepository.save(beneficiary)))
-                .build();
+        Beneficiary beneficiary = beneficiaryRepository.findById(beneficiaryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiary not found"));
+
+        if (!STATUS_PENDING.equalsIgnoreCase(beneficiary.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only pending beneficiaries can be updated");
+        }
+
+        return beneficiary;
+    }
+
+    private String normalizeRejectionReason(String rejectionReason) {
+        if (rejectionReason == null || rejectionReason.isBlank()) {
+            return null;
+        }
+
+        String trimmedReason = rejectionReason.trim();
+        if (trimmedReason.length() > 255) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rejectionReason must be 255 characters or less");
+        }
+
+        return trimmedReason;
     }
 
     private void validateRequest(BeneficiaryRequest request) {
@@ -127,15 +155,6 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         }
     }
 
-    private Beneficiary getBeneficiary(Long userId, String accountNumber, String routingNumber) {
-        requireText(accountNumber, "accountNumber is required");
-        requireText(routingNumber, "routingNumber is required");
-
-        return beneficiaryRepository.findByUserIdAndAccountNumberAndRoutingNumber(
-                        userId, accountNumber.trim(), routingNumber.trim())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiary not found"));
-    }
-
     private BeneficiaryResponse toResponse(Beneficiary beneficiary) {
         String customerName = beneficiary.getUser() != null ? beneficiary.getUser().getUserName() : null;
 
@@ -148,9 +167,25 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
                 .countryCode(beneficiary.getCountryCode())
                 .accountNumber(beneficiary.getAccountNumber())
                 .routingNumber(beneficiary.getRoutingNumber())
+                .bankName(beneficiary.getBankName())
                 .createdDate(beneficiary.getCreatedDate())
                 .status(beneficiary.getStatus())
                 .rejectionReason(beneficiary.getRejectionReason())
                 .build();
+    }
+
+    private String normalizeBankName(String bankName) {
+        if (bankName == null || bankName.isBlank()) {
+            return "N/A";
+        }
+        return bankName.trim();
+    }
+
+    private void logActivity(String activity, String description) {
+        dashboardActivityRepository.save(DashboardActivity.builder()
+                .activity(activity)
+                .description(description)
+                .employeeName("System")
+                .build());
     }
 }

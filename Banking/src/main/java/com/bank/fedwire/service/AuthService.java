@@ -19,14 +19,31 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public ResponseEntity<LoginResponse> login(LoginRequest request) {
-        if (request == null || request.getEmail() == null || request.getPassword() == null) {
+
+        String email = normalize(request != null ? request.getEmail() : null);
+        String password = normalize(request != null ? request.getPassword() : null);
+
+        if (email == null || password == null) {
             return invalidLoginResponse();
         }
 
-        // Keep the existing email/password validation query and only enrich the successful response.
-        return userRepository.findByEmailAndPassword(request.getEmail(), request.getPassword())
+        return userRepository.findByEmailIgnoreCase(email)
+                .filter(user -> passwordMatches(password, user.getPassword()))
                 .map(user -> ResponseEntity.ok(toLoginResponse(user)))
                 .orElseGet(this::invalidLoginResponse);
+    }
+
+    private boolean passwordMatches(String requestPassword, String storedPassword) {
+        return storedPassword != null && storedPassword.trim().equals(requestPassword);
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private LoginResponse toLoginResponse(User user) {
@@ -37,14 +54,13 @@ public class AuthService {
                 .userId(user.getUserId())
                 .userName(user.getUserName())
                 .email(user.getEmail())
-                .password(user.getPassword())
                 .aadharNumber(user.getAadharNumber())
                 .panCardNumber(user.getPanCardNumber())
                 .phoneNumber(user.getPhoneNumber())
                 .address(user.getAddress())
                 .createdDate(user.getCreatedDate())
                 .roleId(roleId)
-                .roleName(resolveRoleName(roleId))
+                .roleName(resolveRoleName(role))
                 .message("Login successful")
                 .build();
     }
@@ -56,14 +72,21 @@ public class AuthService {
                         .build());
     }
 
-    private String resolveRoleName(Long roleId) {
-        // Translate the stored role_id values into the role names expected by the login client.
+    private String resolveRoleName(Role role) {
+        String roleName = role != null ? normalize(role.getRoleName()) : null;
+        if (roleName != null) {
+            return roleName.toUpperCase();
+        }
+
+        Long roleId = role != null ? role.getRoleId() : null;
         if (Long.valueOf(1L).equals(roleId)) {
             return "EMPLOYEE";
         }
+
         if (Long.valueOf(2L).equals(roleId)) {
             return "CUSTOMER";
         }
+
         return null;
     }
 }

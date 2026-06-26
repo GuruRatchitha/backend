@@ -4,8 +4,10 @@ import com.bank.fedwire.dto.TransactionResponse;
 import com.bank.fedwire.dto.EmployeeTransactionQueueResponse;
 import com.bank.fedwire.dto.TransactionDetailResponse;
 import com.bank.fedwire.entity.Account;
+import com.bank.fedwire.entity.DashboardActivity;
 import com.bank.fedwire.entity.MessageHeader;
 import com.bank.fedwire.entity.Transaction;
+import com.bank.fedwire.repository.DashboardActivityRepository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.repository.TransactionRepository;
@@ -32,6 +34,7 @@ public class TransactionServiceImpl implements TransactionService {
     private final MessageHeaderRepository messageHeaderRepository;
     private final PACS008Repository pacs008Repository;
     private final Pacs008XmlGeneratorService pacs008XmlGeneratorService;
+    private final DashboardActivityRepository dashboardActivityRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -112,6 +115,7 @@ public class TransactionServiceImpl implements TransactionService {
         transaction.setTransactionStatus(status);
         transaction.setPendingPaymentKey(null);
         transactionRepository.save(transaction);
+        logActivity("Transaction " + status, "Transaction " + transaction.getTransactionId() + " was " + status.toLowerCase() + ".");
 
         messageHeaderRepository.findByTransactionId(transactionId)
                 .ifPresent(messageHeader -> updateMessageHeaderStatus(messageHeader, status));
@@ -176,5 +180,13 @@ public class TransactionServiceImpl implements TransactionService {
     private void updateMessageHeaderStatus(MessageHeader messageHeader, String status) {
         messageHeader.setMessageStatus(status);
         messageHeaderRepository.save(messageHeader);
+    }
+
+    private void logActivity(String activity, String description) {
+        dashboardActivityRepository.save(DashboardActivity.builder()
+                .activity(activity)
+                .description(description)
+                .employeeName("System")
+                .build());
     }
 }

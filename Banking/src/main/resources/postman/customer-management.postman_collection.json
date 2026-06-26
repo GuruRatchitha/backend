@@ -1,0 +1,93 @@
+{
+  "info": {
+    "name": "Customer Management API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "customerId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Customer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/customers",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "customers"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userName\": \"Ravi Kumar\",\n  \"email\": \"ravi.kumar@example.com\",\n  \"password\": \"Password@123\",\n  \"phoneNumber\": \"9876543210\",\n  \"aadharNumber\": \"123456789012\",\n  \"panCardNumber\": \"ABCDE1234F\",\n  \"address\": \"123 Main Street\",\n  \"townName\": \"Chennai\",\n  \"accountType\": \"SAVINGS\",\n  \"initialBalance\": 500\n}"
+        }
+      }
+    },
+    {
+      "name": "Get All Customers",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/customers",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "customers"]
+        }
+      }
+    },
+    {
+      "name": "Get Customer By Id",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/customers/{{customerId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "customers", "{{customerId}}"]
+        }
+      }
+    },
+    {
+      "name": "Update Customer",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/customers/{{customerId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "customers", "{{customerId}}"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userName\": \"Ravi Kumar Updated\",\n  \"email\": \"ravi.updated@example.com\",\n  \"password\": \"Password@123\",\n  \"phoneNumber\": \"9876543210\",\n  \"aadharNumber\": \"123456789012\",\n  \"panCardNumber\": \"ABCDE1234F\",\n  \"address\": \"456 Park Street\",\n  \"townName\": \"Bengaluru\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Delete Customer",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/api/customers/{{customerId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "customers", "{{customerId}}"]
+        }
+      }
+    }
+  ]
+}

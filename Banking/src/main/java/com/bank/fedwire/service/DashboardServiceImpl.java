@@ -1,16 +1,19 @@
 package com.bank.fedwire.service;
 
-import com.bank.fedwire.dto.AccountSummary;
+import com.bank.fedwire.dto.AccountStatisticsResponse;
 import com.bank.fedwire.dto.DashboardSummaryResponse;
-import com.bank.fedwire.dto.TransactionPageResponse;
-import com.bank.fedwire.dto.TransactionResponse;
-import com.bank.fedwire.entity.Account;
-import com.bank.fedwire.entity.Transaction;
-import com.bank.fedwire.entity.TransactionStatus;
+import com.bank.fedwire.dto.PendingBeneficiaryResponse;
+import com.bank.fedwire.dto.PendingTransactionResponse;
+import com.bank.fedwire.dto.RecentActivityResponse;
+import com.bank.fedwire.dto.RecentCustomerResponse;
+import com.bank.fedwire.entity.Role;
+import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.AccountRepository;
+import com.bank.fedwire.repository.BeneficiaryRepository;
+import com.bank.fedwire.repository.DashboardActivityRepository;
 import com.bank.fedwire.repository.TransactionRepository;
+import com.bank.fedwire.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -18,108 +21,122 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class DashboardServiceImpl implements DashboardService {
 
+    private static final String ROLE_CUSTOMER = "CUSTOMER";
+    private static final String ROLE_EMPLOYEE = "EMPLOYEE";
+    private static final String STATUS_PENDING = "PENDING";
+    private static final int DASHBOARD_LIMIT = 5;
+
+    private final UserRepository userRepository;
     private final AccountRepository accountRepository;
+    private final BeneficiaryRepository beneficiaryRepository;
     private final TransactionRepository transactionRepository;
+    private final DashboardActivityRepository dashboardActivityRepository;
 
     @Override
     @Transactional(readOnly = true)
-    public DashboardSummaryResponse getSummary(Long userId) {
-        List<Account> accounts = accountRepository.findByUserUserId(userId);
+    public DashboardSummaryResponse getSummary(Long employeeUserId) {
+        requireEmployee(employeeUserId);
 
-        BigDecimal totalBalance = accounts.stream()
-                .map(Account::getBalance)
-                .filter(balance -> balance != null)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        List<AccountSummary> accountSummaries = accounts.stream()
-                .map(this::toAccountSummary)
-                .toList();
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfDay = today.atStartOfDay();
+        LocalDateTime startOfTomorrow = today.plusDays(1).atStartOfDay();
 
         return DashboardSummaryResponse.builder()
-                .totalBalance(totalBalance)
-                .accountCount(accountRepository.countByUserUserId(userId))
-                .completedTransactions(transactionRepository.countByTransactionStatusInAndUserId(Set.of(
-                        TransactionStatus.APPROVED.name(),
-                        TransactionStatus.COMPLETED.name()
-                ), userId))
-                .pendingTransactions(transactionRepository.countByStatusAndUserId(TransactionStatus.PENDING, userId))
-                .accounts(accountSummaries)
+                .totalCustomers(userRepository.countByRoleRoleNameIgnoreCase(ROLE_CUSTOMER))
+                .totalAccounts(accountRepository.count())
+                .totalBankBalance(nullToZero(accountRepository.sumTotalBalance()))
+                .pendingBeneficiaries(beneficiaryRepository.countByStatusIgnoreCase(STATUS_PENDING))
+                .pendingTransactions(transactionRepository.countByTransactionStatusIgnoreCase(STATUS_PENDING))
+                .todayCustomers(userRepository.countByRoleRoleNameIgnoreCaseAndCreatedDateBetween(
+                        ROLE_CUSTOMER,
+                        startOfDay,
+                        startOfTomorrow))
                 .build();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public TransactionPageResponse getTransactions(Long userId, String limit, int page, int size) {
-        if ("5".equals(limit)) {
-            List<TransactionResponse> transactions = transactionRepository
-                    .findTop5ByAccountUserUserIdOrderByTransactionDateTimeDesc(userId).stream()
-                    .map(this::toTransactionResponse)
-                    .toList();
+    public List<RecentCustomerResponse> getRecentCustomers(Long employeeUserId) {
+        requireEmployee(employeeUserId);
+        return userRepository.findRecentCustomers(ROLE_CUSTOMER, latestFive());
+    }
 
-            return TransactionPageResponse.builder()
-                    .transactions(transactions)
-                    .page(0)
-                    .size(5)
-                    .totalElements(transactions.size())
-                    .totalPages(transactions.isEmpty() ? 0 : 1)
-                    .build();
+    @Override
+    @Transactional(readOnly = true)
+    public List<PendingBeneficiaryResponse> getPendingBeneficiaries(Long employeeUserId) {
+        requireEmployee(employeeUserId);
+        return beneficiaryRepository.findPendingBeneficiaries(STATUS_PENDING, latestFive());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PendingTransactionResponse> getPendingTransactions(Long employeeUserId) {
+        requireEmployee(employeeUserId);
+        return transactionRepository.findPendingTransactions(STATUS_PENDING, latestFive());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AccountStatisticsResponse getAccountStatistics(Long employeeUserId) {
+        requireEmployee(employeeUserId);
+
+        long savings = 0;
+        long current = 0;
+        long salary = 0;
+
+        for (Object[] row : accountRepository.countAccountsByType()) {
+            String accountType = row[0] != null ? row[0].toString() : "";
+            long count = row[1] instanceof Number number ? number.longValue() : 0;
+            if ("SAVINGS".equals(accountType)) {
+                savings = count;
+            } else if ("CURRENT".equals(accountType)) {
+                current = count;
+            } else if ("SALARY".equals(accountType) || "SALERY".equals(accountType)) {
+                salary += count;
+            }
         }
 
-        if (!"all".equalsIgnoreCase(limit)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be 5 or all");
+        return AccountStatisticsResponse.builder()
+                .savings(savings)
+                .current(current)
+                .salary(salary)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RecentActivityResponse> getRecentActivities(Long employeeUserId) {
+        requireEmployee(employeeUserId);
+        return dashboardActivityRepository.findRecentActivities(latestFive());
+    }
+
+    private void requireEmployee(Long employeeUserId) {
+        if (employeeUserId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "X-User-Id header is required.");
         }
 
-        PageRequest pageRequest = buildPageRequest(page, size);
-        Page<Transaction> transactions = transactionRepository
-                .findByAccountUserUserIdOrderByTransactionDateTimeDesc(userId, pageRequest);
-
-        return TransactionPageResponse.builder()
-                .transactions(transactions.getContent().stream()
-                        .map(this::toTransactionResponse)
-                        .toList())
-                .page(transactions.getNumber())
-                .size(transactions.getSize())
-                .totalElements(transactions.getTotalElements())
-                .totalPages(transactions.getTotalPages())
-                .build();
+        User user = userRepository.findWithRoleByUserId(employeeUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user not found."));
+        Role role = user.getRole();
+        String roleName = role != null ? role.getRoleName() : null;
+        if (!ROLE_EMPLOYEE.equalsIgnoreCase(roleName)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only employees can access dashboard APIs.");
+        }
     }
 
-    private AccountSummary toAccountSummary(Account account) {
-        return AccountSummary.builder()
-                .accountNumber(account.getAccountNumber())
-                .accountType(account.getAccountType())
-                .balance(account.getBalance())
-                .monthlyChange(0.0)
-                .build();
+    private PageRequest latestFive() {
+        return PageRequest.of(0, DASHBOARD_LIMIT);
     }
 
-    private PageRequest buildPageRequest(int page, int size) {
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.min(Math.max(size, 1), 100);
-        return PageRequest.of(safePage, safeSize);
-    }
-
-    private TransactionResponse toTransactionResponse(Transaction transaction) {
-        Account account = transaction.getAccount();
-
-        return TransactionResponse.builder()
-                .transactionReference(String.valueOf(transaction.getTransactionId()))
-                .beneficiaryName(transaction.getBeneficiaryName())
-                .amount(transaction.getAmount())
-                .currency(account != null ? account.getCurrency() : null)
-                .purpose(transaction.getRemarks())
-                .transactionStatus(transaction.getTransactionStatus())
-                .transferStatus(transaction.getTransactionStatus())
-                .transactionDate(transaction.getTransactionDateTime())
-                .accountNumber(transaction.getAccountNumber())
-                .accountType(account != null ? account.getAccountType() : null)
-                .build();
+    private BigDecimal nullToZero(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 }

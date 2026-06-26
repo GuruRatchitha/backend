@@ -15,6 +15,7 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         ensureUserColumns();
+        ensureAccountColumns();
         ensureBeneficiaryIdColumn();
         ensureTransactionColumns();
         ensurePaymentMessageTables();
@@ -25,9 +26,17 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         addColumnIfMissing("users", "town_name", "ALTER TABLE users ADD COLUMN town_name VARCHAR(255) NULL");
     }
 
+    private void ensureAccountColumns() {
+        dropForeignKeysForColumn("account", "customer_id");
+        dropColumnIfExists("account", "customer_id", "ALTER TABLE account DROP COLUMN customer_id");
+        dropColumnIfExists("account", "initial_balance", "ALTER TABLE account DROP COLUMN initial_balance");
+    }
+
     private void ensureBeneficiaryIdColumn() {
         addColumnIfMissing("beneficiary", "beneficiary_id",
                 "ALTER TABLE beneficiary ADD COLUMN beneficiary_id BIGINT NOT NULL AUTO_INCREMENT UNIQUE FIRST");
+        addColumnIfMissing("beneficiary", "bank_name",
+                "ALTER TABLE beneficiary ADD COLUMN bank_name VARCHAR(255) NULL");
     }
 
     private void ensureTransactionColumns() {
@@ -153,6 +162,22 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         if (columnExists(tableName, columnName)) {
             jdbcTemplate.execute(ddl);
         }
+    }
+
+    private void dropForeignKeysForColumn(String tableName, String columnName) {
+        if (!columnExists(tableName, columnName)) {
+            return;
+        }
+
+        jdbcTemplate.queryForList("""
+                SELECT CONSTRAINT_NAME
+                FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME = ?
+                  AND REFERENCED_TABLE_NAME IS NOT NULL
+                """, String.class, tableName, columnName).forEach(constraintName ->
+                jdbcTemplate.execute("ALTER TABLE " + tableName + " DROP FOREIGN KEY `" + constraintName + "`"));
     }
 
     private boolean tableExists(String tableName) {
