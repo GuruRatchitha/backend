@@ -48,8 +48,14 @@ public class Account {
     @Column(name = "account_number", unique = true, nullable = false, length = 11)
     private String accountNumber;
 
+    @Column(name = "account_name")
+    private String accountName;
+
     @Column(name = "iban", unique = true, length = 21)
     private String iban;
+
+    @Column(name = "routing_number")
+    private String routingNumber;
 
     @Column(name = "account_type", nullable = false)
     private String accountType;
@@ -65,6 +71,9 @@ public class Account {
 
     @Column(name = "created_date", nullable = false, updatable = false)
     private LocalDateTime createdDate;
+
+    @Column(name = "updated_date")
+    private LocalDateTime updatedDate;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)

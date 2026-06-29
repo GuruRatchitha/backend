@@ -1,23 +1,20 @@
 package com.bank.fedwire.service;
 
 import com.bank.fedwire.dto.Pacs002MessageDto;
-import com.bank.fedwire.entity.MessageHeader;
 import com.bank.fedwire.entity.PACS002;
 import com.bank.fedwire.entity.Transaction;
-import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS002Repository;
 import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -27,86 +24,111 @@ public class Pacs002ProcessingService {
     private final PACS002Repository pacs002Repository;
     private final PACS008Repository pacs008Repository;
     private final TransactionRepository transactionRepository;
-    private final MessageHeaderRepository messageHeaderRepository;
     private final Pacs002XmlParserService pacs002XmlParserService;
+    private final SettlementTransactionService settlementTransactionService;
 
     @Transactional
     public void process(String xmlPayload) {
-        Pacs002MessageDto parsed = pacs002XmlParserService.parse(xmlPayload);
+        try {
+            log.info("Parsing PACS002 XML payload length={}", xmlPayload != null ? xmlPayload.length() : 0);
+            Pacs002MessageDto parsed = pacs002XmlParserService.parse(xmlPayload);
+            log.info("Parsed PACS002 fields original_message_id={}, message_id={}, transfer_id={}, transaction_status={}, reason_code={}",
+                    parsed.getOriginalMessageId(), parsed.getMessageId(), parsed.getTransferId(),
+                    parsed.getTransactionStatus(), parsed.getReasonCode());
 
-        if (isAlreadyProcessed(parsed)) {
-            log.info("Skipping duplicate PACS002 message messageId={}, originalMessageId={}, transferId={}",
-                    parsed.getMessageId(), parsed.getOriginalMessageId(), parsed.getTransferId());
-            return;
+            if (isAlreadyProcessed(parsed)) {
+                log.info("Skipping duplicate PACS002 message messageType=pacs.002.001.10, messageId={}, originalReference={}, transactionId={}, processingResult=SKIPPED_DUPLICATE",
+                        parsed.getMessageId(), parsed.getOriginalMessageId(), null);
+                return;
+            }
+
+            String normalizedStatus = normalizeStatus(parsed.getTransactionStatus());
+            log.info("Resolving transaction for PACS002 using transferId={}, originalMessageId={}, messageId={}",
+                    parsed.getTransferId(), parsed.getOriginalMessageId(), parsed.getMessageId());
+            Optional<Transaction> transaction = resolveTransaction(parsed);
+            transaction.ifPresentOrElse(
+                    value -> log.info("Resolved PACS002 to transactionId={}", value.getTransactionId()),
+                    () -> log.warn("PACS002 transaction could not be resolved; saving XML without settlement update messageId={}, originalReference={}, transferId={}",
+                            parsed.getMessageId(), parsed.getOriginalMessageId(), parsed.getTransferId()));
+
+            PACS002 pacs002 = PACS002.builder()
+                    .originalMessageId(parsed.getOriginalMessageId())
+                    .messageId(parsed.getMessageId())
+                    .transferId(parsed.getTransferId())
+                    .transactionStatus(normalizedStatus)
+                    .reasonCode(parsed.getReasonCode())
+                    .xmlPayload(parsed.getXmlPayload())
+                    .transactionId(transaction.map(Transaction::getTransactionId).orElse(null))
+                    .receivedTimestamp(LocalDateTime.now(ZoneOffset.UTC))
+                    .build();
+
+            log.info("Persisting PACS002 entity transactionId={}, messageId={}, transferId={}, xmlPayloadLength={}",
+                    pacs002.getTransactionId(), pacs002.getMessageId(), pacs002.getTransferId(),
+                    pacs002.getXmlPayload() != null ? pacs002.getXmlPayload().length() : 0);
+            pacs002Repository.saveAndFlush(pacs002);
+
+            if (transaction.isPresent() && isSettlementStatus(normalizedStatus)) {
+                try {
+                    settlementTransactionService.processPacs002(transaction.get(), pacs002);
+                } catch (Exception settlementException) {
+                    log.error("PACS002 XML was saved but settlement processing failed transactionId={}, messageId={}",
+                            transaction.get().getTransactionId(), parsed.getMessageId(), settlementException);
+                }
+            } else if (!isSettlementStatus(normalizedStatus)) {
+                log.warn("PACS002 XML saved without settlement update because status is missing or unsupported status={}, messageId={}",
+                        normalizedStatus, parsed.getMessageId());
+            }
+
+            log.info("Processed PACS002 messageType=pacs.002.001.10, messageId={}, originalReference={}, transactionId={}, processingResult=PROCESSED, status={}",
+                    parsed.getMessageId(), parsed.getOriginalMessageId(), pacs002.getTransactionId(), normalizedStatus);
+        } catch (Exception ex) {
+            log.error("PACS002 processing failed", ex);
+            throw ex;
         }
-
-        Transaction transaction = resolveTransaction(parsed);
-
-        String normalizedStatus = normalizeStatus(parsed.getTransactionStatus());
-        if (normalizedStatus == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PACS002 transaction_status is required");
-        }
-
-        transaction.setTransactionStatus(normalizedStatus);
-        transactionRepository.save(transaction);
-
-        MessageHeader messageHeader = messageHeaderRepository.findByTransactionId(transaction.getTransactionId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Message header not found for transactionId " + transaction.getTransactionId()));
-        messageHeader.setMessageStatus(normalizedStatus);
-        messageHeaderRepository.save(messageHeader);
-
-        PACS002 pacs002 = PACS002.builder()
-                .originalMessageId(parsed.getOriginalMessageId())
-                .messageId(parsed.getMessageId())
-                .transferId(parsed.getTransferId())
-                .transactionStatus(normalizedStatus)
-                .reasonCode(parsed.getReasonCode())
-                .xmlPayload(parsed.getXmlPayload())
-                .transactionId(transaction.getTransactionId())
-                .receivedTimestamp(LocalDateTime.now(ZoneOffset.UTC))
-                .build();
-        pacs002Repository.save(pacs002);
-
-        log.info("Processed PACS002 for transactionId={}, transferId={}, originalMessageId={}, status={}",
-                transaction.getTransactionId(), parsed.getTransferId(), parsed.getOriginalMessageId(), normalizedStatus);
     }
 
     private boolean isAlreadyProcessed(Pacs002MessageDto parsed) {
         if (parsed.getMessageId() != null && pacs002Repository.existsByMessageId(parsed.getMessageId())) {
+            log.info("Duplicate PACS002 detected by messageId={}", parsed.getMessageId());
             return true;
         }
 
-        if (parsed.getOriginalMessageId() != null && pacs002Repository.existsByOriginalMessageId(parsed.getOriginalMessageId())) {
-            return true;
-        }
-
-        return parsed.getTransferId() != null && pacs002Repository.existsByTransferId(parsed.getTransferId());
+        return false;
     }
 
-    private Transaction resolveTransaction(Pacs002MessageDto parsed) {
+    private Optional<Transaction> resolveTransaction(Pacs002MessageDto parsed) {
         if (parsed.getTransferId() != null && !parsed.getTransferId().isBlank()) {
-            Transaction transaction = transactionRepository.findByTransferId(parsed.getTransferId().trim())
-                    .orElse(null);
-            if (transaction != null) {
+            String reference = parsed.getTransferId().trim();
+            Optional<Transaction> transaction = transactionRepository.findByTransferId(reference)
+                    .or(() -> findTransactionByPacs008Reference(reference));
+            if (transaction.isPresent()) {
                 return transaction;
             }
         }
 
         if (parsed.getOriginalMessageId() != null && !parsed.getOriginalMessageId().isBlank()) {
             return pacs008Repository.findByMessageId(parsed.getOriginalMessageId().trim())
-                    .map(pacs008 -> transactionRepository.findById(pacs008.getTransactionId())
-                            .orElseThrow(() -> new ResponseStatusException(
-                                    HttpStatus.NOT_FOUND,
-                                    "Transaction not found for originalMessageId " + parsed.getOriginalMessageId())))
-                    .orElseThrow(() -> new ResponseStatusException(
-                            HttpStatus.NOT_FOUND,
-                            "PACS008 record not found for originalMessageId " + parsed.getOriginalMessageId()));
+                    .flatMap(pacs008 -> transactionRepository.findById(pacs008.getTransactionId()));
         }
 
-        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "PACS002 must include transfer_id or original_message_id");
+        if (parsed.getMessageId() != null && !parsed.getMessageId().isBlank()) {
+            return pacs008Repository.findByMessageId(parsed.getMessageId().trim())
+                    .flatMap(pacs008 -> transactionRepository.findById(pacs008.getTransactionId()));
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<Transaction> findTransactionByPacs008Reference(String reference) {
+        return pacs008Repository.findByTransferId(reference)
+                .or(() -> pacs008Repository.findByTxId(reference))
+                .or(() -> pacs008Repository.findByInstructionId(reference))
+                .or(() -> pacs008Repository.findByEndToEndId(reference))
+                .flatMap(pacs008 -> transactionRepository.findById(pacs008.getTransactionId()));
+    }
+
+    private boolean isSettlementStatus(String status) {
+        return "ACCP".equals(status) || "RJCT".equals(status);
     }
 
     private String normalizeStatus(String status) {
@@ -115,15 +137,14 @@ public class Pacs002ProcessingService {
         }
 
         String value = status.trim().toUpperCase(Locale.ROOT);
-        if (value.contains("RJCT") || "REJECTED".equals(value)) {
-            return "FAILED";
+        if (value.contains("RJCT")) {
+            return "RJCT";
         }
-        if (value.contains("ACCP") || value.contains("ACSC") || value.contains("ACTC")
-                || "APPROVED".equals(value) || "COMPLETED".equals(value)) {
-            return "COMPLETED";
+        if (value.contains("ACSC")) {
+            return "ACCP";
         }
-        if (value.contains("PDNG") || value.contains("ACSP") || "PROCESSING".equals(value)) {
-            return "PROCESSING";
+        if (value.contains("ACCP")) {
+            return "ACCP";
         }
         return value;
     }

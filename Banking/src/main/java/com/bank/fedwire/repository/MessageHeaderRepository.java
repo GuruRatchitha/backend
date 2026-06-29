@@ -10,4 +10,6 @@ import java.util.Optional;
 public interface MessageHeaderRepository extends JpaRepository<MessageHeader, String> {
 
     Optional<MessageHeader> findByTransactionId(Long transactionId);
+
+    Optional<MessageHeader> findTopByTransactionIdOrderByCreatedDateDesc(Long transactionId);
 }

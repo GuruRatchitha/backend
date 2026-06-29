@@ -1,7 +1,11 @@
 package com.bank.fedwire.service;
 
 import com.bank.fedwire.entity.PACS008;
+import com.bank.fedwire.entity.Account;
+import com.bank.fedwire.entity.Beneficiary;
 import com.bank.fedwire.entity.Transaction;
+import com.bank.fedwire.repository.AccountRepository;
+import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.PACS008Repository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -35,10 +39,7 @@ public class Pacs008XmlGeneratorService {
     private static final String SETTLEMENT_METHOD = "CLRG";
     private static final String CLEARING_SYSTEM = "FDW";
     private static final String CLEARING_SYSTEM_MEMBER_CODE = "USABA";
-    private static final String FROM_MEMBER_ID = "653060219";
-    private static final String TO_MEMBER_ID = "021151080";
-    private static final String CREDITOR_ROUTING_NUMBER = "321171184";
-    private static final String DEBTOR_ROUTING_NUMBER = "091409571";
+    private static final String DEFAULT_TO_MEMBER_ID = "021151080";
     private static final String CREDITOR_ACCOUNT_ID = "33333333330";
     private static final String LOCAL_INSTRUMENT = "CTRC";
     private static final String CHARGE_BEARER = "DEBT";
@@ -47,7 +48,10 @@ public class Pacs008XmlGeneratorService {
     private static final String PACS_SCHEMA =
             "Fedwire_Funds_Service_Release_2025_CustomerCreditTransfer_pacs_008_001_08_20240708_1351_iso15enriched.xsd";
     private static final String STATUS_APPROVED = "APPROVED";
+    private static final String STATUS_WAITING = "WAITING_FOR_PACS002";
 
+    private final AccountRepository accountRepository;
+    private final BeneficiaryRepository beneficiaryRepository;
     private final PACS008Repository pacs008Repository;
 
     @Transactional
@@ -56,17 +60,18 @@ public class Pacs008XmlGeneratorService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "transactionId is required");
         }
 
-        PACS008 pacs008 = pacs008Repository.findByTransactionId(transactionId)
+        PACS008 pacs008 = pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(transactionId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "PACS008 record not found for transactionId " + transactionId
                                 + ". Generate XML only for transactions created through POST /api/payments."));
 
         Transaction transaction = pacs008.getTransaction();
-        if (transaction == null || !STATUS_APPROVED.equalsIgnoreCase(transaction.getTransactionStatus())) {
+        if (transaction == null || (!STATUS_APPROVED.equalsIgnoreCase(transaction.getTransactionStatus())
+                && !STATUS_WAITING.equalsIgnoreCase(transaction.getTransactionStatus()))) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "PACS008 XML can only be generated for APPROVED transactions");
+                    "PACS008 XML can only be generated for APPROVED or WAITING_FOR_PACS002 transactions");
         }
 
         if (pacs008.getXmlPayload() != null && !pacs008.getXmlPayload().isBlank()) {
@@ -92,8 +97,11 @@ public class Pacs008XmlGeneratorService {
 
             start(writer, "urn", "FedwireFundsIncomingMessage", FEDWIRE_NS);
             start(writer, "urn", "FedwireFundsCustomerCreditTransfer", FEDWIRE_NS);
-            writeAppHeader(writer, pacs008);
-            writeDocument(writer, pacs008);
+            String senderRoutingNumber = resolveSenderRoutingNumber(pacs008);
+            String receiverRoutingNumber = resolveReceiverRoutingNumber(pacs008);
+
+            writeAppHeader(writer, pacs008, senderRoutingNumber);
+            writeDocument(writer, pacs008, senderRoutingNumber, receiverRoutingNumber);
             writer.writeEndElement();
             writer.writeEndElement();
             writer.writeEndElement();
@@ -106,14 +114,15 @@ public class Pacs008XmlGeneratorService {
         }
     }
 
-    private void writeAppHeader(XMLStreamWriter writer, PACS008 pacs008) throws XMLStreamException {
+    private void writeAppHeader(XMLStreamWriter writer, PACS008 pacs008, String senderRoutingNumber)
+            throws XMLStreamException {
         start(writer, "h", "AppHdr", HEAD_NS);
         writer.writeNamespace("h", HEAD_NS);
         writer.writeNamespace("xsi", XSI_NS);
         writer.writeAttribute("xsi", XSI_NS, "schemaLocation", HEAD_NS + " " + APP_HEADER_SCHEMA);
 
-        writeHeaderMember(writer, "Fr", FROM_MEMBER_ID);
-        writeHeaderMember(writer, "To", TO_MEMBER_ID);
+        writeHeaderMember(writer, "Fr", senderRoutingNumber);
+        writeHeaderMember(writer, "To", DEFAULT_TO_MEMBER_ID);
         element(writer, "h", HEAD_NS, "BizMsgIdr", require(pacs008.getMessageId(), "messageId"));
         element(writer, "h", HEAD_NS, "MsgDefIdr", MESSAGE_TYPE);
         element(writer, "h", HEAD_NS, "BizSvc", BUSINESS_SERVICE);
@@ -127,14 +136,15 @@ public class Pacs008XmlGeneratorService {
         writer.writeEndElement();
     }
 
-    private void writeDocument(XMLStreamWriter writer, PACS008 pacs008) throws XMLStreamException {
+    private void writeDocument(XMLStreamWriter writer, PACS008 pacs008, String senderRoutingNumber, String receiverRoutingNumber)
+            throws XMLStreamException {
         start(writer, "p", "Document", PACS_NS);
         writer.writeNamespace("xsi", XSI_NS);
         writer.writeAttribute("xsi", XSI_NS, "schemaLocation", PACS_NS + " " + PACS_SCHEMA);
 
         start(writer, "p", "FIToFICstmrCdtTrf", PACS_NS);
         writeGroupHeader(writer, pacs008);
-        writeCreditTransferTransaction(writer, pacs008);
+        writeCreditTransferTransaction(writer, pacs008, senderRoutingNumber, receiverRoutingNumber);
         writer.writeEndElement();
         writer.writeEndElement();
     }
@@ -154,10 +164,8 @@ public class Pacs008XmlGeneratorService {
         writer.writeEndElement();
     }
 
-    private void writeCreditTransferTransaction(XMLStreamWriter writer, PACS008 pacs008) throws XMLStreamException {
-        String senderRoutingNumber = FROM_MEMBER_ID;
-        String beneficiaryRoutingNumber = resolveBeneficiaryRoutingNumber(pacs008);
-
+    private void writeCreditTransferTransaction(XMLStreamWriter writer, PACS008 pacs008, String senderRoutingNumber,
+                                               String receiverRoutingNumber) throws XMLStreamException {
         start(writer, "p", "CdtTrfTxInf", PACS_NS);
         writePaymentId(writer, pacs008);
         writePaymentTypeInfo(writer);
@@ -167,12 +175,12 @@ public class Pacs008XmlGeneratorService {
         amountElement(writer, "InstdAmt", pacs008.getCurrency(), pacs008.getAmount());
         element(writer, "p", PACS_NS, "ChrgBr", CHARGE_BEARER);
         writeAgent(writer, "InstgAgt", senderRoutingNumber, null, null, null);
-        writeAgent(writer, "InstdAgt", beneficiaryRoutingNumber, null, null, null);
+        writeAgent(writer, "InstdAgt", receiverRoutingNumber, null, null, null);
         writeParty(writer, "Dbtr", pacs008.getDebtorName(), pacs008.getDebtorTown(), pacs008.getDebtorCountry());
         writeAccount(writer, "DbtrAcct", pacs008.getDebtorAccount());
-        writeAgent(writer, "DbtrAgt", DEBTOR_ROUTING_NUMBER,
+        writeAgent(writer, "DbtrAgt", senderRoutingNumber,
                 pacs008.getDebtorName(), pacs008.getDebtorTown(), pacs008.getDebtorCountry());
-        writeAgent(writer, "CdtrAgt", CREDITOR_ROUTING_NUMBER,
+        writeAgent(writer, "CdtrAgt", receiverRoutingNumber,
                 pacs008.getCreditorName(), pacs008.getCreditorTown(), pacs008.getCreditorCountry());
         writeParty(writer, "Cdtr", pacs008.getCreditorName(), pacs008.getCreditorTown(), pacs008.getCreditorCountry());
         writeAccount(writer, "CdtrAcct", CREDITOR_ACCOUNT_ID);
@@ -280,14 +288,25 @@ public class Pacs008XmlGeneratorService {
         return require(value, fieldName).format(ISO_LOCAL_DATE_TIME);
     }
 
-    private String resolveBeneficiaryRoutingNumber(PACS008 pacs008) {
-        Transaction transaction = pacs008.getTransaction();
-        if (transaction == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "PACS008 transaction is required to derive beneficiary routing number");
-        }
-        return require(transaction.getBeneficiaryRoutingNumber(), "beneficiaryRoutingNumber");
+    private String resolveSenderRoutingNumber(PACS008 pacs008) {
+        Transaction transaction = require(pacs008.getTransaction(), "transaction");
+        Account senderAccount = accountRepository.findByAccountNumber(transaction.getAccountNumber())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Sender account not found for account number " + transaction.getAccountNumber()));
+
+        return require(senderAccount.getRoutingNumber(), "sender routing_number");
+    }
+
+    private String resolveReceiverRoutingNumber(PACS008 pacs008) {
+        Transaction transaction = require(pacs008.getTransaction(), "transaction");
+        Beneficiary beneficiary = beneficiaryRepository.findByAccountNumberAndRoutingNumber(
+                        transaction.getBeneficiaryAccountNumber(), transaction.getBeneficiaryRoutingNumber())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Beneficiary not found for account number " + transaction.getBeneficiaryAccountNumber()));
+
+        return require(beneficiary.getRoutingNumber(), "receiver routing_number");
     }
 
     private String require(String value, String fieldName) {

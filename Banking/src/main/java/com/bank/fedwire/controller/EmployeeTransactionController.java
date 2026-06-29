@@ -53,6 +53,17 @@ public class EmployeeTransactionController {
                         .body("PACS002 response has not been received yet."));
     }
 
+    @GetMapping(value = "/{transactionId}/admi002", produces = MediaType.APPLICATION_XML_VALUE)
+    public ResponseEntity<String> getAdmi002Xml(@PathVariable Long transactionId) {
+        return transactionService.findEmployeeTransactionAdmi002Xml(transactionId)
+                .map(xml -> ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_XML)
+                        .body(xml))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body("ADMI002 response has not been received yet."));
+    }
+
     @RequestMapping(value = "/{transactionId}/approve", method = {RequestMethod.POST, RequestMethod.PUT})
     public ResponseEntity<TransactionDetailResponse> approveTransaction(@PathVariable Long transactionId) {
         return ResponseEntity.ok(transactionService.approveTransaction(transactionId));

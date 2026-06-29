@@ -19,6 +19,8 @@ public interface TransactionService {
 
     Optional<String> findEmployeeTransactionPacs002Xml(Long transactionId);
 
+    Optional<String> findEmployeeTransactionAdmi002Xml(Long transactionId);
+
     TransactionDetailResponse holdTransaction(Long transactionId);
 
     TransactionDetailResponse rejectTransaction(Long transactionId);

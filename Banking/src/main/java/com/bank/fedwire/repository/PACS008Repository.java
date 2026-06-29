@@ -14,11 +14,19 @@ import java.util.List;
 @Repository
 public interface PACS008Repository extends JpaRepository<PACS008, Long> {
 
-    Optional<PACS008> findByTransactionId(Long transactionId);
+    Optional<PACS008> findTopByTransactionIdOrderByCreatedDateDesc(Long transactionId);
 
     Optional<PACS008> findByTransferId(String transferId);
 
+    Optional<PACS008> findTopByTransferIdOrderByCreatedDateDesc(String transferId);
+
     Optional<PACS008> findByMessageId(String messageId);
+
+    Optional<PACS008> findByTxId(String txId);
+
+    Optional<PACS008> findByInstructionId(String instructionId);
+
+    Optional<PACS008> findByEndToEndId(String endToEndId);
 
     List<PACS008> findByXmlPayloadIsNotNullAndSqsPublishedAtIsNull();
 

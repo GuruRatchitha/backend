@@ -5,5 +5,5 @@ import com.bank.fedwire.dto.PaymentResponse;
 
 public interface PaymentService {
 
-    PaymentResponse initiatePayment(PaymentRequest request);
+    PaymentResponse initiatePayment(Long userId, PaymentRequest request);
 }

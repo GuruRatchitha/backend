@@ -52,6 +52,29 @@ class EmployeeTransactionControllerTest {
     }
 
     @Test
+    void admi002XmlReturnsStoredXmlWhenPresent() {
+        when(transactionService.findEmployeeTransactionAdmi002Xml(77L))
+                .thenReturn(Optional.of("<Document><MsgDefIdr>admi.002.001.01</MsgDefIdr></Document>"));
+
+        ResponseEntity<String> response = controller.getAdmi002Xml(77L);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(MediaType.APPLICATION_XML, response.getHeaders().getContentType());
+        assertTrue(response.getBody().contains("admi.002.001.01"));
+    }
+
+    @Test
+    void admi002XmlReturnsMessageWhenMissing() {
+        when(transactionService.findEmployeeTransactionAdmi002Xml(77L)).thenReturn(Optional.empty());
+
+        ResponseEntity<String> response = controller.getAdmi002Xml(77L);
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertEquals(MediaType.TEXT_PLAIN, response.getHeaders().getContentType());
+        assertEquals("ADMI002 response has not been received yet.", response.getBody());
+    }
+
+    @Test
     void queueEndpointDelegatesToTransactionService() {
         when(transactionService.getEmployeeTransactionQueue()).thenReturn(List.of(
                 EmployeeTransactionQueueResponse.builder()

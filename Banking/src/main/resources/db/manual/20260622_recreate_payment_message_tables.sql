@@ -6,12 +6,33 @@ USE dev_db;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
+ALTER TABLE account
+    ADD COLUMN account_name VARCHAR(255) NULL AFTER account_number,
+    ADD COLUMN routing_number VARCHAR(255) NULL AFTER iban,
+    ADD COLUMN updated_date DATETIME(6) NULL AFTER balance;
+
 CREATE TABLE IF NOT EXISTS business_message_sequence (
     sequence_date DATE NOT NULL,
     sequence_value INT NOT NULL,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (sequence_date)
+);
+
+CREATE TABLE IF NOT EXISTS settlement_transactions (
+    settlement_transaction_id BIGINT NOT NULL AUTO_INCREMENT,
+    payment_id BIGINT NOT NULL,
+    sender_account VARCHAR(255) NOT NULL,
+    beneficiary_account VARCHAR(255) NOT NULL,
+    settlement_account VARCHAR(255) NOT NULL,
+    amount DECIMAL(19, 2) NOT NULL,
+    transaction_type VARCHAR(32) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    pacs008_message_id VARCHAR(22) NULL,
+    pacs002_status VARCHAR(16) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (settlement_transaction_id)
 );
 
 DROP TABLE IF EXISTS pacs008;
@@ -66,7 +87,7 @@ CREATE TABLE pacs008 (
 CREATE TABLE pacs002 (
     pacs002_id BIGINT NOT NULL AUTO_INCREMENT,
     original_message_id VARCHAR(255) NULL,
-    message_id VARCHAR(22) NULL,
+    message_id VARCHAR(64) NULL,
     transfer_id VARCHAR(35) NULL,
     transaction_status VARCHAR(255) NULL,
     reason_code VARCHAR(255) NULL,

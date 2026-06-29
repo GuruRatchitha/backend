@@ -1,20 +1,31 @@
 package com.bank.fedwire.exception;
 
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        return buildResponse(status, ex.getReason(), null);
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
@@ -54,14 +65,24 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, "Request violates a database constraint.", null);
     }
 
+    @ExceptionHandler({
+            MethodArgumentTypeMismatchException.class,
+            MissingServletRequestParameterException.class,
+            IllegalArgumentException.class
+    })
+    public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), null);
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), null);
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
-        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), null);
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
+        log.error("Unhandled exception", ex);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", null);
     }
 
     private ResponseEntity<ErrorResponse> buildResponse(

@@ -4,6 +4,11 @@
 
 USE dev_db;
 
+ALTER TABLE account
+    ADD COLUMN account_name VARCHAR(255) NULL AFTER account_number,
+    ADD COLUMN routing_number VARCHAR(255) NULL AFTER iban,
+    ADD COLUMN updated_date DATETIME(6) NULL AFTER balance;
+
 SET FOREIGN_KEY_CHECKS = 0;
 
 CREATE TABLE IF NOT EXISTS business_message_sequence (
@@ -12,6 +17,22 @@ CREATE TABLE IF NOT EXISTS business_message_sequence (
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (sequence_date)
+);
+
+CREATE TABLE IF NOT EXISTS settlement_transactions (
+    settlement_transaction_id BIGINT NOT NULL AUTO_INCREMENT,
+    payment_id BIGINT NOT NULL,
+    sender_account VARCHAR(255) NOT NULL,
+    beneficiary_account VARCHAR(255) NOT NULL,
+    settlement_account VARCHAR(255) NOT NULL,
+    amount DECIMAL(19, 2) NOT NULL,
+    transaction_type VARCHAR(32) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    pacs008_message_id VARCHAR(22) NULL,
+    pacs002_status VARCHAR(16) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (settlement_transaction_id)
 );
 
 TRUNCATE TABLE pacs008;
@@ -25,7 +46,7 @@ ALTER TABLE message_header
 
 -- Your existing database may have either messageId or message_id from earlier entity versions.
 ALTER TABLE pacs002
-    MODIFY COLUMN message_id VARCHAR(22) NULL;
+    MODIFY COLUMN message_id VARCHAR(64) NULL;
 
 ALTER TABLE adm002
     MODIFY COLUMN message_id VARCHAR(22) NULL;

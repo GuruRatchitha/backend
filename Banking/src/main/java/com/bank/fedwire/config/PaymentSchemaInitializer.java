@@ -19,6 +19,7 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         ensureBeneficiaryIdColumn();
         ensureTransactionColumns();
         ensureBusinessMessageSequenceTable();
+        ensureSettlementTransactionTable();
         ensurePaymentMessageTables();
     }
 
@@ -31,6 +32,9 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         dropForeignKeysForColumn("account", "customer_id");
         dropColumnIfExists("account", "customer_id", "ALTER TABLE account DROP COLUMN customer_id");
         dropColumnIfExists("account", "initial_balance", "ALTER TABLE account DROP COLUMN initial_balance");
+        addColumnIfMissing("account", "account_name", "ALTER TABLE account ADD COLUMN account_name VARCHAR(255) NULL AFTER account_number");
+        addColumnIfMissing("account", "routing_number", "ALTER TABLE account ADD COLUMN routing_number VARCHAR(255) NULL AFTER iban");
+        addColumnIfMissing("account", "updated_date", "ALTER TABLE account ADD COLUMN updated_date DATETIME(6) NULL AFTER balance");
     }
 
     private void ensureBeneficiaryIdColumn() {
@@ -59,6 +63,7 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
 
         ensurePacs008Columns();
         ensurePacs002Columns();
+        ensureAdmi002Columns();
     }
 
     private void ensurePacs008Columns() {
@@ -89,10 +94,43 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         }
     }
 
+    private void ensureSettlementTransactionTable() {
+        if (!tableExists("settlement_transactions")) {
+            jdbcTemplate.execute("""
+                    CREATE TABLE settlement_transactions (
+                        settlement_transaction_id BIGINT NOT NULL AUTO_INCREMENT,
+                        payment_id BIGINT NOT NULL,
+                        sender_account VARCHAR(255) NOT NULL,
+                        beneficiary_account VARCHAR(255) NOT NULL,
+                        settlement_account VARCHAR(255) NOT NULL,
+                        amount DECIMAL(19, 2) NOT NULL,
+                        transaction_type VARCHAR(32) NOT NULL,
+                        status VARCHAR(16) NOT NULL,
+                        pacs008_message_id VARCHAR(22) NULL,
+                        pacs002_status VARCHAR(16) NULL,
+                        created_at DATETIME(6) NOT NULL,
+                        updated_at DATETIME(6) NOT NULL,
+                        PRIMARY KEY (settlement_transaction_id)
+                    )
+                    """);
+        }
+    }
+
     private void ensurePacs002Columns() {
-        addColumnIfMissing("pacs002", "message_id", "ALTER TABLE pacs002 ADD COLUMN message_id VARCHAR(22) NULL AFTER original_message_id");
+        addColumnIfMissing("pacs002", "message_id", "ALTER TABLE pacs002 ADD COLUMN message_id VARCHAR(64) NULL AFTER original_message_id");
         addColumnIfMissing("pacs002", "transfer_id", "ALTER TABLE pacs002 ADD COLUMN transfer_id VARCHAR(35) NULL AFTER message_id");
         addColumnIfMissing("pacs002", "received_timestamp", "ALTER TABLE pacs002 ADD COLUMN received_timestamp DATETIME(6) NULL AFTER transaction_id");
+    }
+
+    private void ensureAdmi002Columns() {
+        addColumnIfMissing("adm002", "original_reference", "ALTER TABLE adm002 ADD COLUMN original_reference VARCHAR(255) NULL AFTER adm002_id");
+        addColumnIfMissing("adm002", "business_message_id", "ALTER TABLE adm002 ADD COLUMN business_message_id VARCHAR(22) NULL AFTER original_reference");
+        addColumnIfMissing("adm002", "reject_reason_code", "ALTER TABLE adm002 ADD COLUMN reject_reason_code VARCHAR(255) NULL AFTER business_message_id");
+        addColumnIfMissing("adm002", "reject_reason_description", "ALTER TABLE adm002 ADD COLUMN reject_reason_description VARCHAR(1000) NULL AFTER reject_reason_code");
+        addColumnIfMissing("adm002", "rejection_date_time", "ALTER TABLE adm002 ADD COLUMN rejection_date_time DATETIME(6) NULL AFTER reject_reason_description");
+        addColumnIfMissing("adm002", "xml_payload", "ALTER TABLE adm002 ADD COLUMN xml_payload TEXT NULL AFTER rejection_date_time");
+        addColumnIfMissing("adm002", "transaction_id", "ALTER TABLE adm002 ADD COLUMN transaction_id BIGINT NULL AFTER xml_payload");
+        addColumnIfMissing("adm002", "received_timestamp", "ALTER TABLE adm002 ADD COLUMN received_timestamp DATETIME(6) NULL AFTER transaction_id");
     }
 
     private void recreatePaymentMessageTables() {
@@ -154,7 +192,7 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                 CREATE TABLE pacs002 (
                     pacs002_id BIGINT NOT NULL AUTO_INCREMENT,
                     original_message_id VARCHAR(255) NULL,
-                    message_id VARCHAR(22) NULL,
+                    message_id VARCHAR(64) NULL,
                     transfer_id VARCHAR(35) NULL,
                     transaction_status VARCHAR(255) NULL,
                     reason_code VARCHAR(255) NULL,
@@ -168,11 +206,14 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         jdbcTemplate.execute("""
                 CREATE TABLE adm002 (
                     adm002_id BIGINT NOT NULL AUTO_INCREMENT,
-                    original_message_id VARCHAR(255) NULL,
-                    acknowledgement_code VARCHAR(255) NULL,
+                    original_reference VARCHAR(255) NULL,
+                    business_message_id VARCHAR(22) NULL,
+                    reject_reason_code VARCHAR(255) NULL,
+                    reject_reason_description VARCHAR(1000) NULL,
+                    rejection_date_time DATETIME(6) NULL,
                     xml_payload TEXT NULL,
                     transaction_id BIGINT NULL,
-                    message_id VARCHAR(22) NULL,
+                    received_timestamp DATETIME(6) NULL,
                     PRIMARY KEY (adm002_id)
                 )
                 """);

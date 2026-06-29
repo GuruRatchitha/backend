@@ -14,6 +14,7 @@ import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.repository.TransactionRepository;
+import com.bank.fedwire.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -44,6 +45,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final BeneficiaryRepository beneficiaryRepository;
     private final AccountRepository accountRepository;
+    private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
     private final MessageHeaderRepository messageHeaderRepository;
     private final PACS008Repository pacs008Repository;
@@ -51,20 +53,18 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public PaymentResponse initiatePayment(PaymentRequest request) {
+    public PaymentResponse initiatePayment(Long userId, PaymentRequest request) {
         validateRequest(request);
+        validateUserId(userId);
 
         Beneficiary beneficiary = beneficiaryRepository.findByIdForPaymentUpdate(request.getBeneficiaryId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiary not found"));
         validateBeneficiaryStatus(beneficiary);
 
-        User sender = beneficiary.getUser();
-        if (sender == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Beneficiary is not linked to a user");
-        }
-
-        Account senderAccount = selectSenderAccount(sender.getUserId());
-        String pendingPaymentKey = createPendingPaymentKey(sender.getUserId(), beneficiary.getBeneficiaryId());
+        User sender = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sender not found"));
+        Account senderAccount = selectSenderAccount(userId);
+        String pendingPaymentKey = createPendingPaymentKey(userId, beneficiary.getBeneficiaryId());
         PaymentResponse existingPayment = transactionRepository.findByPendingPaymentKey(pendingPaymentKey)
                 .map(this::toPaymentResponse)
                 .orElse(null);
@@ -143,15 +143,16 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private PaymentResponse toPaymentResponse(Transaction transaction) {
-        MessageHeader messageHeader = messageHeaderRepository.findByTransactionId(transaction.getTransactionId())
+        MessageHeader messageHeader = messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(transaction.getTransactionId())
                 .orElse(null);
-        PACS008 pacs008 = pacs008Repository.findByTransactionId(transaction.getTransactionId())
+        PACS008 pacs008 = pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(transaction.getTransactionId())
                 .orElse(null);
 
         return toPaymentResponse(transaction, messageHeader, pacs008);
     }
 
     private PaymentResponse toPaymentResponse(Transaction transaction, MessageHeader messageHeader, PACS008 pacs008) {
+        Account senderAccount = accountRepository.findByAccountNumber(transaction.getAccountNumber()).orElse(null);
         return PaymentResponse.builder()
                 .transactionId(transaction.getTransactionId())
                 .transferId(transaction.getTransferId())
@@ -164,6 +165,8 @@ public class PaymentServiceImpl implements PaymentService {
                 .txId(pacs008 != null ? pacs008.getTxId() : null)
                 .uetr(pacs008 != null ? pacs008.getUetr() : null)
                 .endToEndId(pacs008 != null ? pacs008.getEndToEndId() : null)
+                .senderAccountNumber(transaction.getAccountNumber())
+                .senderAccountType(senderAccount != null ? senderAccount.getAccountType() : null)
                 .amount(transaction.getAmount())
                 .currency(pacs008 != null ? pacs008.getCurrency() : null)
                 .transactionStatus(transaction.getTransactionStatus())
@@ -187,6 +190,12 @@ public class PaymentServiceImpl implements PaymentService {
         String status = beneficiary.getStatus();
         if (!"APPROVED".equalsIgnoreCase(status) && !"ACTIVE".equalsIgnoreCase(status)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Beneficiary must be approved before payment");
+        }
+    }
+
+    private void validateUserId(Long userId) {
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "X-User-Id is required");
         }
     }
 

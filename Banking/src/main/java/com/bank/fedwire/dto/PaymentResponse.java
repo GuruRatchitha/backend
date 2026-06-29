@@ -38,6 +38,10 @@ public class PaymentResponse {
 
     private String endToEndId;
 
+    private String senderAccountNumber;
+
+    private String senderAccountType;
+
     private BigDecimal amount;
 
     private String currency;

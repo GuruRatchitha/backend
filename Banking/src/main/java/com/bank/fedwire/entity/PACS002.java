@@ -35,7 +35,7 @@ public class PACS002 {
     @Column(name = "original_message_id")
     private String originalMessageId;
 
-    @Column(name = "message_id", length = 22)
+    @Column(name = "message_id", length = 64)
     private String messageId;
 
     @Column(name = "transfer_id", length = 35)

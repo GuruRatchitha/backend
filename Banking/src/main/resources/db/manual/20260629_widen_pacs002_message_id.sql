@@ -1,0 +1,4 @@
+USE dev_db;
+
+ALTER TABLE pacs002
+    MODIFY COLUMN message_id VARCHAR(64) NULL;

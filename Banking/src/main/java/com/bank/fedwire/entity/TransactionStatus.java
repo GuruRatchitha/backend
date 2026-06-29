@@ -6,5 +6,7 @@ public enum TransactionStatus {
     REJECTED,
     COMPLETED,
     FAILED,
-    PENDING
+    PENDING,
+    WAITING_FOR_PACS002,
+    SUCCESS
 }

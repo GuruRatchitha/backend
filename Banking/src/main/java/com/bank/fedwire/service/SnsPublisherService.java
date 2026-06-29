@@ -15,6 +15,7 @@ import software.amazon.awssdk.services.sns.model.PublishResponse;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -64,11 +65,18 @@ public class SnsPublisherService {
             pacs008Repository.save(pacs008);
 
             log.info("Published PACS008 to SNS transactionId={}, messageId={}, snsResult={}, topicArn={}",
-                    transactionId, response.messageId(), response.sdkHttpResponse().statusCode(), awsProperties.getTopicArn());
+                    transactionId, response.messageId(), statusCode(response), awsProperties.getTopicArn());
         } catch (Exception ex) {
             log.error("SNS publish failed for transactionId={}", transactionId, ex);
             throw ex;
         }
+    }
+
+    private Integer statusCode(PublishResponse response) {
+        return Optional.ofNullable(response)
+                .map(PublishResponse::sdkHttpResponse)
+                .map(sdkHttpResponse -> sdkHttpResponse.statusCode())
+                .orElse(null);
     }
 
     private boolean isFifoTopic() {

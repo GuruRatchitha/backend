@@ -1,7 +1,11 @@
 package com.bank.fedwire.service;
 
+import com.bank.fedwire.entity.Account;
+import com.bank.fedwire.entity.Beneficiary;
 import com.bank.fedwire.entity.PACS008;
 import com.bank.fedwire.entity.Transaction;
+import com.bank.fedwire.repository.AccountRepository;
+import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.PACS008Repository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,16 +27,24 @@ import static org.mockito.Mockito.when;
 class Pacs008XmlGeneratorServiceTest {
 
     @Mock
+    private AccountRepository accountRepository;
+
+    @Mock
+    private BeneficiaryRepository beneficiaryRepository;
+
+    @Mock
     private PACS008Repository pacs008Repository;
 
     @InjectMocks
     private Pacs008XmlGeneratorService pacs008XmlGeneratorService;
 
     @Test
-    void generateXmlRemovesFractionalSecondsAndUsesFixedRoutingAndAccountValues() {
+    void generateXmlRemovesFractionalSecondsAndUsesDynamicRoutingAndAccountValues() {
         Transaction transaction = Transaction.builder()
                 .transactionId(100L)
+                .accountNumber("11111111111")
                 .transactionStatus("APPROVED")
+                .beneficiaryAccountNumber("99999999999")
                 .beneficiaryRoutingNumber("222222222")
                 .build();
 
@@ -60,7 +72,22 @@ class Pacs008XmlGeneratorServiceTest {
                 .transaction(transaction)
                 .build();
 
-        when(pacs008Repository.findByTransactionId(100L)).thenReturn(Optional.of(pacs008));
+        Account senderAccount = Account.builder()
+                .accountNumber("11111111111")
+                .routingNumber("123123123")
+                .build();
+        Beneficiary beneficiary = Beneficiary.builder()
+                .accountNumber("99999999999")
+                .routingNumber("222222222")
+                .beneficiaryName("Creditor Name")
+                .townName("Chicago")
+                .countryCode("US")
+                .build();
+
+        when(accountRepository.findByAccountNumber("11111111111")).thenReturn(Optional.of(senderAccount));
+        when(beneficiaryRepository.findByAccountNumberAndRoutingNumber("99999999999", "222222222"))
+                .thenReturn(Optional.of(beneficiary));
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(100L)).thenReturn(Optional.of(pacs008));
         when(pacs008Repository.save(any(PACS008.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         String xml = pacs008XmlGeneratorService.generateXml(100L);
@@ -69,8 +96,9 @@ class Pacs008XmlGeneratorServiceTest {
         assertFalse(xml.contains("2026-06-26T05:06:53.306788"));
         assertTrue(xml.contains("<h:BizMsgIdr>20260626N1N2G3H4000001</h:BizMsgIdr>"));
         assertTrue(xml.contains("<p:MsgId>20260626N1N2G3H4000001</p:MsgId>"));
-        assertTrue(xml.contains("321171184"));
-        assertTrue(xml.contains("091409571"));
+        assertTrue(xml.contains("123123123"));
+        assertTrue(xml.contains("021151080"));
+        assertTrue(xml.contains("222222222"));
         assertTrue(xml.contains("33333333330"));
     }
 }
