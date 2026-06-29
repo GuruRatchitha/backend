@@ -4,13 +4,11 @@ import com.bank.fedwire.event.Pacs008ApprovedEvent;
 import com.bank.fedwire.service.SnsPublisherService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
-@ConditionalOnProperty(prefix = "aws", name = "messaging-enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class Pacs008ApprovedEventListener {
