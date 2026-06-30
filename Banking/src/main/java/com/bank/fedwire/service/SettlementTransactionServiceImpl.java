@@ -369,16 +369,36 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         return new SettlementTransactionResponse(
                 settlementTransaction.getSettlementTransactionId(),
                 settlementTransaction.getPaymentId(),
+                resolveHistoryAccountNumber(settlementTransaction),
+                settlementTransaction.getSenderAccount(),
+                settlementTransaction.getBeneficiaryAccount(),
                 settlementTransaction.getSenderAccount(),
                 settlementTransaction.getBeneficiaryAccount(),
                 settlementTransaction.getSettlementAccount(),
                 settlementTransaction.getAmount(),
-                settlementTransaction.getTransactionType() != null ? settlementTransaction.getTransactionType().name() : null,
-                settlementTransaction.getStatus() != null ? settlementTransaction.getStatus().name() : null,
+                resolveHistoryStatus(settlementTransaction.getTransactionType()),
                 settlementTransaction.getPacs008MessageId(),
                 settlementTransaction.getPacs002Status(),
                 settlementTransaction.getCreatedAt(),
                 settlementTransaction.getUpdatedAt());
+    }
+
+    private String resolveHistoryAccountNumber(SettlementTransaction settlementTransaction) {
+        if (settlementTransaction.getTransactionType() == null) {
+            return null;
+        }
+        return switch (settlementTransaction.getTransactionType()) {
+            case DEBIT_TO_SETTLEMENT -> settlementTransaction.getSenderAccount();
+            case CREDIT_TO_BENEFICIARY -> settlementTransaction.getBeneficiaryAccount();
+            case RETURN_TO_SENDER -> settlementTransaction.getSenderAccount();
+        };
+    }
+
+    private String resolveHistoryStatus(SettlementTransactionType transactionType) {
+        return switch (transactionType) {
+            case DEBIT_TO_SETTLEMENT -> "Credited To Settlement";
+            case CREDIT_TO_BENEFICIARY, RETURN_TO_SENDER -> "Debited From Settlement";
+        };
     }
 
     private Specification<SettlementTransaction> buildSpecification(
@@ -402,7 +422,12 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
             }
 
             if (status != null && !status.isBlank()) {
-                predicates.add(criteriaBuilder.equal(root.get("status"), parseStatus(status)));
+                List<SettlementTransactionType> historyStatusTypes = parseHistoryStatusTypes(status);
+                if (historyStatusTypes.isEmpty()) {
+                    predicates.add(criteriaBuilder.equal(root.get("status"), parseStatus(status)));
+                } else {
+                    predicates.add(root.get("transactionType").in(historyStatusTypes));
+                }
             }
 
             if (transactionType != null && !transactionType.isBlank()) {
@@ -411,6 +436,27 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    private List<SettlementTransactionType> parseHistoryStatusTypes(String status) {
+        String normalized = normalizeHistoryStatus(status);
+        if ("credited to settlement".equals(normalized)) {
+            return List.of(SettlementTransactionType.DEBIT_TO_SETTLEMENT);
+        }
+        if ("debited from settlement".equals(normalized)) {
+            return List.of(
+                    SettlementTransactionType.CREDIT_TO_BENEFICIARY,
+                    SettlementTransactionType.RETURN_TO_SENDER);
+        }
+        return List.of();
+    }
+
+    private String normalizeHistoryStatus(String status) {
+        return status.trim()
+                .replaceAll("(?i)\\bamount\\b", "")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.ROOT);
     }
 
     private SettlementTransactionStatus parseStatus(String status) {

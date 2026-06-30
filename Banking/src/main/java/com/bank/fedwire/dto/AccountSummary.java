@@ -17,6 +17,8 @@ public class AccountSummary {
 
     private String accountNumber;
 
+    private String routingNumber;
+
     private String accountType;
 
     private BigDecimal balance;

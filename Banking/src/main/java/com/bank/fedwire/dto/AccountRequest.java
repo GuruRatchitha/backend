@@ -32,4 +32,7 @@ public class AccountRequest {
     @NotNull(message = "Balance is required.")
     @DecimalMin(value = "100.00", inclusive = true, message = "Balance must be at least 100.")
     private BigDecimal balance;
+
+    @Pattern(regexp = "\\d{9}", message = "Routing number must be exactly 9 digits.")
+    private String routingNumber;
 }

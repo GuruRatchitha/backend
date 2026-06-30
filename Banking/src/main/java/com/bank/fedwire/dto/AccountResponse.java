@@ -24,6 +24,8 @@ public class AccountResponse {
 
     private String iban;
 
+    private String routingNumber;
+
     private BigDecimal balance;
 
     private String accountType;

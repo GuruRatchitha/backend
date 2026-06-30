@@ -49,7 +49,7 @@ class SnsPublisherServiceTest {
                         .messageId("sns-message-id")
                         .build());
 
-        SnsPublisherService service = new SnsPublisherService(pacs008Repository, awsProperties, snsClient);
+        SnsPublisherService service = new SnsPublisherService(pacs008Repository, awsProperties, Optional.of(snsClient));
 
         service.publishIfNeeded(100L);
 

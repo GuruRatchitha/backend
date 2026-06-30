@@ -1,6 +1,7 @@
 package com.bank.fedwire.service;
 
 import com.bank.fedwire.dto.AccountStatisticsResponse;
+import com.bank.fedwire.dto.DashboardSettlementTransactionResponse;
 import com.bank.fedwire.dto.DashboardSummaryResponse;
 import com.bank.fedwire.dto.PendingBeneficiaryResponse;
 import com.bank.fedwire.dto.PendingTransactionResponse;
@@ -22,4 +23,6 @@ public interface DashboardService {
     AccountStatisticsResponse getAccountStatistics(Long employeeUserId);
 
     List<RecentActivityResponse> getRecentActivities(Long employeeUserId);
+
+    List<DashboardSettlementTransactionResponse> getRecentSettlementTransactions(Long employeeUserId);
 }

@@ -11,6 +11,7 @@ import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.UserRepository;
 import com.bank.fedwire.util.AccountNumberGenerator;
 import com.bank.fedwire.util.IbanGenerator;
+import com.bank.fedwire.util.RoutingNumberGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.time.LocalDateTime;
 public class AccountServiceImpl implements AccountService {
 
     private static final int MAX_ACCOUNT_NUMBER_ATTEMPTS = 20;
+    private static final int MAX_ROUTING_NUMBER_ATTEMPTS = 20;
     private static final String DEFAULT_CURRENCY = "USD";
     private static final String DEFAULT_STATUS = "ACTIVE";
 
@@ -30,6 +32,7 @@ public class AccountServiceImpl implements AccountService {
     private final UserRepository userRepository;
     private final AccountNumberGenerator accountNumberGenerator;
     private final IbanGenerator ibanGenerator;
+    private final RoutingNumberGenerator routingNumberGenerator;
 
     @Override
     @Transactional
@@ -40,6 +43,7 @@ public class AccountServiceImpl implements AccountService {
         Account account = Account.builder()
                 .user(user)
                 .accountNumber(generateUniqueAccountNumber())
+                .routingNumber(resolveRoutingNumber(request.getRoutingNumber()))
                 .accountType(normalizeAccountType(request.getAccountType()))
                 .balance(request.getBalance())
                 .currency(DEFAULT_CURRENCY)
@@ -76,6 +80,34 @@ public class AccountServiceImpl implements AccountService {
         throw new DuplicateAccountNumberException("Unable to generate a unique account number.");
     }
 
+    private String resolveRoutingNumber(String routingNumber) {
+        String normalized = trim(routingNumber);
+        if (normalized != null) {
+            validateRoutingNumber(normalized);
+            if (accountRepository.existsByRoutingNumber(normalized)) {
+                throw new DuplicateResourceException("Routing number already exists.");
+            }
+            return normalized;
+        }
+        return generateUniqueRoutingNumber();
+    }
+
+    private String generateUniqueRoutingNumber() {
+        for (int attempt = 0; attempt < MAX_ROUTING_NUMBER_ATTEMPTS; attempt++) {
+            String routingNumber = routingNumberGenerator.generate();
+            if (!accountRepository.existsByRoutingNumber(routingNumber)) {
+                return routingNumber;
+            }
+        }
+        throw new DuplicateResourceException("Unable to generate a unique routing number.");
+    }
+
+    private void validateRoutingNumber(String routingNumber) {
+        if (!routingNumber.matches("\\d{9}")) {
+            throw new IllegalArgumentException("Routing number must be exactly 9 digits.");
+        }
+    }
+
     private boolean isAccountNumberConstraintViolation(DataIntegrityViolationException ex) {
         String message = ex.getMostSpecificCause() != null
                 ? ex.getMostSpecificCause().getMessage()
@@ -89,6 +121,7 @@ public class AccountServiceImpl implements AccountService {
                 .userId(account.getUser() != null ? account.getUser().getUserId() : null)
                 .accountNumber(account.getAccountNumber())
                 .iban(account.getIban())
+                .routingNumber(account.getRoutingNumber())
                 .balance(account.getBalance())
                 .accountType(account.getAccountType())
                 .currency(account.getCurrency())

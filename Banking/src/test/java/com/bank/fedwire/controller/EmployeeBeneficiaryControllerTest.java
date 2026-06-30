@@ -1,6 +1,5 @@
 package com.bank.fedwire.controller;
 
-import com.bank.fedwire.dto.BeneficiaryCreateResponse;
 import com.bank.fedwire.dto.BeneficiaryResponse;
 import com.bank.fedwire.service.BeneficiaryService;
 import org.junit.jupiter.api.Test;
@@ -9,7 +8,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -73,36 +71,26 @@ class EmployeeBeneficiaryControllerTest {
     }
 
     @Test
-    void approveBeneficiarySupportsLegacyUserAccountRoutingRoute() {
-        BeneficiaryCreateResponse response = BeneficiaryCreateResponse.builder()
-                .message("Beneficiary approved successfully")
-                .beneficiary(sampleBeneficiaries("APPROVED").get(0))
-                .build();
-        when(beneficiaryService.approveBeneficiary(2L, "123455678999945354", "987654321")).thenReturn(response);
+    void approveBeneficiaryReturnsUpdatedBeneficiary() {
+        BeneficiaryResponse approved = sampleBeneficiaries("APPROVED").get(0);
+        when(beneficiaryService.approveBeneficiary(1L)).thenReturn(approved);
 
-        BeneficiaryCreateResponse body = controller
-                .approveBeneficiary(2L, "123455678999945354", "987654321")
-                .getBody();
+        BeneficiaryResponse body = controller.approveBeneficiary(1L).getBody();
 
-        assertEquals("Beneficiary approved successfully", body.getMessage());
-        verify(beneficiaryService).approveBeneficiary(2L, "123455678999945354", "987654321");
+        assertEquals("APPROVED", body.getStatus());
+        verify(beneficiaryService).approveBeneficiary(1L);
     }
 
     @Test
-    void rejectBeneficiarySupportsLegacyUserAccountRoutingRoute() {
-        BeneficiaryCreateResponse response = BeneficiaryCreateResponse.builder()
-                .message("Beneficiary rejected successfully")
-                .beneficiary(sampleBeneficiaries("REJECTED").get(0))
-                .build();
-        when(beneficiaryService.rejectBeneficiary(2L, "123455678999945354", "987654321", "bad data"))
-                .thenReturn(response);
+    void rejectBeneficiaryAcceptsRejectionReasonBody() {
+        BeneficiaryResponse rejected = sampleBeneficiaries("REJECTED").get(0);
+        when(beneficiaryService.rejectBeneficiary(1L, "Invalid account")).thenReturn(rejected);
 
-        BeneficiaryCreateResponse body = controller
-                .rejectBeneficiary(2L, "123455678999945354", "987654321", Map.of("rejectionReason", "bad data"))
-                .getBody();
+        BeneficiaryResponse body = controller.rejectBeneficiary(1L, Map.of("rejectionReason", "Invalid account")).getBody();
 
-        assertEquals("Beneficiary rejected successfully", body.getMessage());
-        verify(beneficiaryService).rejectBeneficiary(2L, "123455678999945354", "987654321", "bad data");
+        assertEquals("REJECTED", body.getStatus());
+        assertEquals("Invalid account", body.getRejectionReason());
+        verify(beneficiaryService).rejectBeneficiary(1L, "Invalid account");
     }
 
     private List<BeneficiaryResponse> sampleBeneficiaries(String status) {

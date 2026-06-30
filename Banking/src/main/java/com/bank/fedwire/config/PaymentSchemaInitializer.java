@@ -1,20 +1,31 @@
 package com.bank.fedwire.config;
 
+import com.bank.fedwire.util.RoutingNumberGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 @Component
 @RequiredArgsConstructor
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class PaymentSchemaInitializer implements ApplicationRunner {
 
     private final JdbcTemplate jdbcTemplate;
+    private final RoutingNumberGenerator routingNumberGenerator;
 
     @Override
     public void run(ApplicationArguments args) {
         ensureUserColumns();
+        ensureAadharColumnLengths();
         ensureAccountColumns();
         ensureBeneficiaryIdColumn();
         ensureTransactionColumns();
@@ -28,16 +39,62 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         addColumnIfMissing("users", "town_name", "ALTER TABLE users ADD COLUMN town_name VARCHAR(255) NULL");
     }
 
+    private void ensureAadharColumnLengths() {
+        expandColumnIfShorterThan("users", "aadhar_number", 12,
+                "ALTER TABLE users MODIFY COLUMN aadhar_number VARCHAR(12) NOT NULL");
+        expandColumnIfShorterThan("customers", "aadhar_number", 12,
+                "ALTER TABLE customers MODIFY COLUMN aadhar_number VARCHAR(12) NOT NULL");
+    }
+
     private void ensureAccountColumns() {
         dropForeignKeysForColumn("account", "customer_id");
         dropColumnIfExists("account", "customer_id", "ALTER TABLE account DROP COLUMN customer_id");
         dropColumnIfExists("account", "initial_balance", "ALTER TABLE account DROP COLUMN initial_balance");
         addColumnIfMissing("account", "account_name", "ALTER TABLE account ADD COLUMN account_name VARCHAR(255) NULL AFTER account_number");
-        addColumnIfMissing("account", "routing_number", "ALTER TABLE account ADD COLUMN routing_number VARCHAR(255) NULL AFTER iban");
+        addColumnIfMissing("account", "routing_number", "ALTER TABLE account ADD COLUMN routing_number VARCHAR(9) NULL AFTER iban");
+        ensureAccountRoutingNumbers();
+        jdbcTemplate.execute("ALTER TABLE account MODIFY COLUMN routing_number VARCHAR(9) NOT NULL");
+        addUniqueIndexIfMissing("account", "uk_account_routing_number",
+                "ALTER TABLE account ADD CONSTRAINT uk_account_routing_number UNIQUE (routing_number)");
         addColumnIfMissing("account", "updated_date", "ALTER TABLE account ADD COLUMN updated_date DATETIME(6) NULL AFTER balance");
     }
 
+    private void ensureAccountRoutingNumbers() {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT account_id, routing_number
+                FROM account
+                ORDER BY account_id
+                """);
+        Set<String> usedRoutingNumbers = new HashSet<>();
+        for (Map<String, Object> row : rows) {
+            Object routingNumberValue = row.get("routing_number");
+            String routingNumber = routingNumberValue != null ? routingNumberValue.toString().trim() : null;
+            if (routingNumber != null && routingNumber.matches("\\d{9}") && usedRoutingNumbers.add(routingNumber)) {
+                continue;
+            }
+
+            String generatedRoutingNumber = generateUniqueRoutingNumber(usedRoutingNumbers);
+            jdbcTemplate.update(
+                    "UPDATE account SET routing_number = ? WHERE account_id = ?",
+                    generatedRoutingNumber,
+                    row.get("account_id"));
+        }
+    }
+
+    private String generateUniqueRoutingNumber(Set<String> usedRoutingNumbers) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            String routingNumber = routingNumberGenerator.generate();
+            if (usedRoutingNumbers.add(routingNumber)) {
+                return routingNumber;
+            }
+        }
+        throw new IllegalStateException("Unable to generate a unique routing number for existing accounts.");
+    }
+
     private void ensureBeneficiaryIdColumn() {
+        if (tableExists("beneficiary") && !columnExists("beneficiary", "beneficiary_id") && columnExists("beneficiary", "id")) {
+            jdbcTemplate.execute("ALTER TABLE beneficiary CHANGE COLUMN id beneficiary_id BIGINT NOT NULL AUTO_INCREMENT");
+        }
         addColumnIfMissing("beneficiary", "beneficiary_id",
                 "ALTER TABLE beneficiary ADD COLUMN beneficiary_id BIGINT NOT NULL AUTO_INCREMENT UNIQUE FIRST");
         addColumnIfMissing("beneficiary", "bank_name",
@@ -315,6 +372,23 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                   AND COLUMN_NAME = ?
                 """, Integer.class, tableName, columnName);
         return count != null && count > 0;
+    }
+
+    private void expandColumnIfShorterThan(String tableName, String columnName, int minimumLength, String ddl) {
+        if (!columnExists(tableName, columnName)) {
+            return;
+        }
+
+        Integer length = jdbcTemplate.queryForObject("""
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME = ?
+                """, Integer.class, tableName, columnName);
+        if (length != null && length < minimumLength) {
+            jdbcTemplate.execute(ddl);
+        }
     }
 
     private void addUniqueIndexIfMissing(String tableName, String indexName, String ddl) {

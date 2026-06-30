@@ -6,6 +6,7 @@ import com.bank.fedwire.dto.PendingBeneficiaryResponse;
 import com.bank.fedwire.dto.PendingTransactionResponse;
 import com.bank.fedwire.dto.RecentActivityResponse;
 import com.bank.fedwire.dto.RecentCustomerResponse;
+import com.bank.fedwire.dto.SettlementTransactionResponse;
 import com.bank.fedwire.entity.Role;
 import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.AccountRepository;
@@ -18,6 +19,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,6 +31,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,6 +53,9 @@ class DashboardServiceImplTest {
     @Mock
     private DashboardActivityRepository dashboardActivityRepository;
 
+    @Mock
+    private SettlementTransactionService settlementTransactionService;
+
     private DashboardServiceImpl dashboardService;
 
     @BeforeEach
@@ -56,7 +65,8 @@ class DashboardServiceImplTest {
                 accountRepository,
                 beneficiaryRepository,
                 transactionRepository,
-                dashboardActivityRepository);
+                dashboardActivityRepository,
+                settlementTransactionService);
 
         when(userRepository.findWithRoleByUserId(1L)).thenReturn(Optional.of(User.builder()
                 .userId(1L)
@@ -131,5 +141,54 @@ class DashboardServiceImplTest {
         assertThat(dashboardService.getPendingBeneficiaries(1L)).containsExactly(beneficiary);
         assertThat(dashboardService.getPendingTransactions(1L)).containsExactly(transaction);
         assertThat(dashboardService.getRecentActivities(1L)).containsExactly(activity);
+    }
+
+    @Test
+    void recentSettlementTransactionsReturnLatestFiveDashboardFields() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 6, 30, 15, 30);
+        SettlementTransactionResponse transaction = new SettlementTransactionResponse(
+                55L,
+                7001L,
+                "111111111",
+                "111111111",
+                "222222222",
+                "111111111",
+                "222222222",
+                "999900001",
+                new BigDecimal("250.00"),
+                "Credited To Settlement",
+                "PACS008-7001",
+                null,
+                createdAt,
+                createdAt);
+
+        when(settlementTransactionService.getSettlementTransactions(
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                any(Pageable.class))).thenReturn(new PageImpl<>(List.of(transaction)));
+
+        var response = dashboardService.getRecentSettlementTransactions(1L);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).paymentId()).isEqualTo(7001L);
+        assertThat(response.get(0).accountNumber()).isEqualTo("111111111");
+        assertThat(response.get(0).amount()).isEqualByComparingTo("250.00");
+        assertThat(response.get(0).status()).isEqualTo("Credited To Settlement");
+        assertThat(response.get(0).createdDate()).isEqualTo(createdAt);
+
+        verify(settlementTransactionService).getSettlementTransactions(
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                org.mockito.ArgumentMatchers.argThat(pageable -> {
+                    Sort.Order createdAtOrder = pageable.getSort().getOrderFor("createdAt");
+                    return pageable.getPageNumber() == 0
+                            && pageable.getPageSize() == 5
+                            && createdAtOrder != null
+                            && createdAtOrder.isDescending();
+                }));
     }
 }

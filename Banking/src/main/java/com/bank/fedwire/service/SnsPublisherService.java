@@ -3,9 +3,8 @@ package com.bank.fedwire.service;
 import com.bank.fedwire.config.AwsProperties;
 import com.bank.fedwire.entity.PACS008;
 import com.bank.fedwire.repository.PACS008Repository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +18,9 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Supplier;
 
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class SnsPublisherService {
 
@@ -30,39 +29,24 @@ public class SnsPublisherService {
 
     private final PACS008Repository pacs008Repository;
     private final AwsProperties awsProperties;
-    private final Supplier<SnsClient> snsClientSupplier;
-
-    @Autowired
-    public SnsPublisherService(PACS008Repository pacs008Repository,
-                               AwsProperties awsProperties,
-                               ObjectProvider<SnsClient> snsClientProvider) {
-        this(pacs008Repository, awsProperties, snsClientProvider::getIfAvailable);
-    }
-
-    SnsPublisherService(PACS008Repository pacs008Repository,
-                        AwsProperties awsProperties,
-                        SnsClient snsClient) {
-        this(pacs008Repository, awsProperties, () -> snsClient);
-    }
-
-    private SnsPublisherService(PACS008Repository pacs008Repository,
-                                AwsProperties awsProperties,
-                                Supplier<SnsClient> snsClientSupplier) {
-        this.pacs008Repository = pacs008Repository;
-        this.awsProperties = awsProperties;
-        this.snsClientSupplier = snsClientSupplier;
-    }
+    private final Optional<SnsClient> snsClient;
 
     @Transactional
     public void publishIfNeeded(Long transactionId) {
         if (!awsProperties.isMessagingEnabled()) {
-            log.info("Skipping SNS publish for transactionId={} because aws.messaging-enabled is false", transactionId);
+            log.info("AWS messaging is disabled; skipping SNS publish for transactionId={}", transactionId);
             return;
         }
 
-        SnsClient snsClient = snsClientSupplier.get();
-        if (snsClient == null) {
-            log.warn("Skipping SNS publish for transactionId={} because no SnsClient bean is available", transactionId);
+        if (snsClient.isEmpty()) {
+            log.warn("AWS messaging is enabled but no SNS client is available; skipping SNS publish for transactionId={}",
+                    transactionId);
+            return;
+        }
+
+        if (awsProperties.getTopicArn() == null || awsProperties.getTopicArn().isBlank()) {
+            log.warn("AWS messaging is enabled but aws.topic-arn is not configured; skipping SNS publish for transactionId={}",
+                    transactionId);
             return;
         }
 
@@ -91,7 +75,7 @@ public class SnsPublisherService {
                 builder.messageDeduplicationId(UUID.randomUUID().toString().replace("-", ""));
             }
 
-            PublishResponse response = snsClient.publish(builder.build());
+            PublishResponse response = snsClient.get().publish(builder.build());
 
             pacs008.setSqsPublishedAt(LocalDateTime.now(ZoneOffset.UTC));
             pacs008.setSqsMessageId(response.messageId());

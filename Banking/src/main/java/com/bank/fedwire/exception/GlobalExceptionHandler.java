@@ -3,8 +3,10 @@ package com.bank.fedwire.exception;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -65,10 +67,17 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, "Request violates a database constraint.", null);
     }
 
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ErrorResponse> handleDataAccess(DataAccessException ex) {
+        log.error("Database operation failed", ex);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Database operation failed while processing the request.", null);
+    }
+
     @ExceptionHandler({
             MethodArgumentTypeMismatchException.class,
             MissingServletRequestParameterException.class,
-            IllegalArgumentException.class
+            IllegalArgumentException.class,
+            HttpMessageNotReadableException.class
     })
     public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), null);
