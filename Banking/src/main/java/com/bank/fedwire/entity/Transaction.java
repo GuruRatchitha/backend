@@ -50,16 +50,22 @@ public class Transaction {
     @Column(name = "account_number", nullable = false)
     private String accountNumber;
 
-    @Column(nullable = false)
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    @Column(nullable = false, precision = 65, scale = 2)
+    // END TEMPORARY
     private BigDecimal amount;
 
     @Column(name = "beneficiary_name", nullable = false)
     private String beneficiaryName;
 
-    @Column(name = "beneficiary_account_number", nullable = false)
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    @Column(name = "beneficiary_account_number", nullable = false, length = 1024)
+    // END TEMPORARY
     private String beneficiaryAccountNumber;
 
-    @Column(name = "beneficiary_routing_number", nullable = false)
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    @Column(name = "beneficiary_routing_number", nullable = false, length = 1024)
+    // END TEMPORARY
     private String beneficiaryRoutingNumber;
 
     @Column(name = "pending_payment_key", unique = true, length = 64)

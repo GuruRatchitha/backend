@@ -64,7 +64,9 @@ public class PACS008 {
     @Column(name = "bank_transaction_id", nullable = false, length = 22)
     private String bankTransactionId;
 
-    @Column(nullable = false, precision = 19, scale = 2)
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    @Column(nullable = false, precision = 65, scale = 2)
+    // END TEMPORARY
     private BigDecimal amount;
 
     @Column(nullable = false, length = 3)
@@ -85,7 +87,9 @@ public class PACS008 {
     @Column(name = "creditor_name", nullable = false, length = 140)
     private String creditorName;
 
-    @Column(name = "creditor_account", nullable = false)
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    @Column(name = "creditor_account", nullable = false, length = 1024)
+    // END TEMPORARY
     private String creditorAccount;
 
     @Column(name = "creditor_town", nullable = false, length = 35)

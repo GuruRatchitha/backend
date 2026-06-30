@@ -31,7 +31,7 @@ class Pacs002ListenerServiceTest {
     private Pacs002ProcessingService pacs002ProcessingService;
 
     @Mock
-    private Admi002ProcessingService admi002ProcessingService;
+    private InboundSqsMessageSupport inboundSqsMessageSupport;
 
     @InjectMocks
     private Pacs002ListenerService pacs002ListenerService;
@@ -51,6 +51,11 @@ class Pacs002ListenerServiceTest {
                         .body(snsWrapper)
                         .build())
                 .build());
+        when(inboundSqsMessageSupport.extractXmlPayload(snsWrapper)).thenReturn(xml);
+        when(inboundSqsMessageSupport.extractMetadata(xml)).thenReturn(
+                new InboundSqsMessageSupport.InboundMessageMetadata("pacs.002.001.10", "MSG-2"));
+        when(inboundSqsMessageSupport.isSnsNotificationWrapper(snsWrapper)).thenReturn(true);
+        when(inboundSqsMessageSupport.isPacs002("pacs.002.001.10")).thenReturn(true);
 
         pacs002ListenerService.pollQueue();
 
@@ -61,7 +66,7 @@ class Pacs002ListenerServiceTest {
     }
 
     @Test
-    void pollQueueRoutesAdmi002MessagesToAdmiProcessor() {
+    void pollQueueIgnoresNonPacs002Messages() {
         String queueUrl = "https://sqs.us-east-2.amazonaws.com/123456789012/pacs002";
         String xml = "<Envelope><AppHdr><MsgDefIdr>admi.002.001.01</MsgDefIdr><BizMsgIdr>MSG-9</BizMsgIdr></AppHdr>"
                 + "<Document><RltdRef><Ref>TRF-123</Ref></RltdRef></Document></Envelope>";
@@ -74,10 +79,14 @@ class Pacs002ListenerServiceTest {
                         .body(xml)
                         .build())
                 .build());
+        when(inboundSqsMessageSupport.extractXmlPayload(xml)).thenReturn(xml);
+        when(inboundSqsMessageSupport.extractMetadata(xml)).thenReturn(
+                new InboundSqsMessageSupport.InboundMessageMetadata("admi.002.001.01", "MSG-9"));
+        when(inboundSqsMessageSupport.isPacs002("admi.002.001.01")).thenReturn(false);
 
         pacs002ListenerService.pollQueue();
 
-        verify(admi002ProcessingService).process(xml);
-        verify(sqsClient).deleteMessage(any(DeleteMessageRequest.class));
+        verify(pacs002ProcessingService, org.mockito.Mockito.never()).process(xml);
+        verify(sqsClient, org.mockito.Mockito.never()).deleteMessage(any(DeleteMessageRequest.class));
     }
 }

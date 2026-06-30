@@ -5,6 +5,7 @@ import com.bank.fedwire.entity.ADMI002;
 import com.bank.fedwire.entity.PACS008;
 import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.repository.ADMI002Repository;
+import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.repository.TransactionRepository;
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,10 @@ class Admi002ProcessingServiceTest {
     private TransactionRepository transactionRepository;
 
     @Mock
-    private Admi002XmlParserService admi002XmlParserService;
+    private MessageHeaderRepository messageHeaderRepository;
+
+    @Mock
+    private Admi002ParserService admi002ParserService;
 
     @InjectMocks
     private Admi002ProcessingService admi002ProcessingService;
@@ -48,10 +52,13 @@ class Admi002ProcessingServiceTest {
 
         Admi002MessageDto parsed = Admi002MessageDto.builder()
                 .messageType("admi.002.001.01")
+                .messageId("ADM-MSG-1")
                 .businessMessageId("ADM-1")
+                .relatedMessageId("TRF-123")
                 .originalReference("TRF-123")
-                .rejectReasonCode("AC04")
-                .rejectReasonDescription("Account closed")
+                .errorCode("AC04")
+                .errorDescription("Account closed")
+                .severity("FATAL")
                 .xmlPayload(xml)
                 .build();
 
@@ -59,25 +66,41 @@ class Admi002ProcessingServiceTest {
                 .transactionId(55L)
                 .build();
 
-        when(admi002XmlParserService.parse(xml)).thenReturn(parsed);
-        when(admi002Repository.existsByBusinessMessageId("ADM-1")).thenReturn(false);
-        when(admi002Repository.existsByOriginalReference("TRF-123")).thenReturn(false);
+        when(admi002ParserService.parse(xml)).thenReturn(parsed);
+        when(admi002Repository.existsByMessageId("ADM-MSG-1")).thenReturn(false);
+        when(messageHeaderRepository.findByBusinessMessageId("ADM-1")).thenReturn(Optional.empty());
+        when(messageHeaderRepository.findByMessageId("ADM-1")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByMessageId("ADM-1")).thenReturn(Optional.empty());
+        when(pacs008Repository.findTopByTransferIdOrderByCreatedDateDesc("ADM-1")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByTransferId("ADM-1")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByTxId("ADM-1")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByInstructionId("ADM-1")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByEndToEndId("ADM-1")).thenReturn(Optional.empty());
+        when(messageHeaderRepository.findByMessageId("TRF-123")).thenReturn(Optional.empty());
+        when(messageHeaderRepository.findByBusinessMessageId("TRF-123")).thenReturn(Optional.empty());
         when(pacs008Repository.findByMessageId("TRF-123")).thenReturn(Optional.of(PACS008.builder()
                 .transactionId(55L)
                 .build()));
         when(transactionRepository.findById(55L)).thenReturn(Optional.of(transaction));
+        when(transactionRepository.findByTransactionIdForUpdate(55L)).thenReturn(Optional.of(transaction));
+        when(messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(55L)).thenReturn(Optional.empty());
 
         admi002ProcessingService.process(xml);
 
         ArgumentCaptor<ADMI002> captor = ArgumentCaptor.forClass(ADMI002.class);
-        verify(admi002Repository).save(captor.capture());
+        verify(admi002Repository).saveAndFlush(captor.capture());
 
         ADMI002 saved = captor.getValue();
+        assertEquals("ADM-MSG-1", saved.getMessageId());
         assertEquals("TRF-123", saved.getOriginalReference());
         assertEquals("ADM-1", saved.getBusinessMessageId());
-        assertEquals("AC04", saved.getRejectReasonCode());
-        assertEquals("Account closed", saved.getRejectReasonDescription());
+        assertEquals("TRF-123", saved.getRelatedMessageId());
+        assertEquals("AC04", saved.getErrorCode());
+        assertEquals("Account closed", saved.getErrorDescription());
+        assertEquals("FATAL", saved.getSeverity());
         assertEquals(55L, saved.getTransactionId());
+        assertEquals("ADMI002_RECEIVED", transaction.getTransactionStatus());
+        verify(transactionRepository).saveAndFlush(transaction);
     }
 
     @Test
@@ -87,21 +110,36 @@ class Admi002ProcessingServiceTest {
 
         Admi002MessageDto parsed = Admi002MessageDto.builder()
                 .messageType("admi.002.001.01")
+                .messageId("ADM-MSG-2")
                 .businessMessageId("ADM-2")
+                .relatedMessageId("UNKNOWN")
                 .originalReference("UNKNOWN")
                 .xmlPayload(xml)
                 .build();
 
-        when(admi002XmlParserService.parse(xml)).thenReturn(parsed);
-        when(admi002Repository.existsByBusinessMessageId("ADM-2")).thenReturn(false);
-        when(admi002Repository.existsByOriginalReference("UNKNOWN")).thenReturn(false);
+        when(admi002ParserService.parse(xml)).thenReturn(parsed);
+        when(admi002Repository.existsByMessageId("ADM-MSG-2")).thenReturn(false);
+        when(messageHeaderRepository.findByMessageId("ADM-2")).thenReturn(Optional.empty());
+        when(messageHeaderRepository.findByBusinessMessageId("ADM-2")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByMessageId("ADM-2")).thenReturn(Optional.empty());
+        when(pacs008Repository.findTopByTransferIdOrderByCreatedDateDesc("ADM-2")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByTransferId("ADM-2")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByTxId("ADM-2")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByInstructionId("ADM-2")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByEndToEndId("ADM-2")).thenReturn(Optional.empty());
+        when(messageHeaderRepository.findByMessageId("UNKNOWN")).thenReturn(Optional.empty());
+        when(messageHeaderRepository.findByBusinessMessageId("UNKNOWN")).thenReturn(Optional.empty());
         when(pacs008Repository.findByMessageId("UNKNOWN")).thenReturn(Optional.empty());
         when(pacs008Repository.findTopByTransferIdOrderByCreatedDateDesc("UNKNOWN")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByTransferId("UNKNOWN")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByTxId("UNKNOWN")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByInstructionId("UNKNOWN")).thenReturn(Optional.empty());
+        when(pacs008Repository.findByEndToEndId("UNKNOWN")).thenReturn(Optional.empty());
 
         admi002ProcessingService.process(xml);
 
         ArgumentCaptor<ADMI002> captor = ArgumentCaptor.forClass(ADMI002.class);
-        verify(admi002Repository).save(captor.capture());
+        verify(admi002Repository).saveAndFlush(captor.capture());
 
         ADMI002 saved = captor.getValue();
         assertNull(saved.getTransactionId());

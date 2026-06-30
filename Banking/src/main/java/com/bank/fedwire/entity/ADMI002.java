@@ -29,11 +29,32 @@ public class ADMI002 {
     @Column(name = "adm002_id")
     private Long admi002Id;
 
+    @Column(name = "message_id", length = 64)
+    private String messageId;
+
+    @Column(name = "original_message_id", length = 64)
+    private String originalMessageId;
+
     @Column(name = "original_reference")
     private String originalReference;
 
-    @Column(name = "business_message_id", length = 22)
+    @Column(name = "business_message_id", length = 64)
     private String businessMessageId;
+
+    @Column(name = "related_message_id", length = 64)
+    private String relatedMessageId;
+
+    @Column(name = "error_code")
+    private String errorCode;
+
+    @Column(name = "error_description", length = 1000)
+    private String errorDescription;
+
+    @Column(name = "severity", length = 64)
+    private String severity;
+
+    @Column(name = "creation_datetime")
+    private LocalDateTime creationDateTime;
 
     @Column(name = "reject_reason_code")
     private String rejectReasonCode;

@@ -39,7 +39,9 @@ public class TransactionServiceImpl implements TransactionService {
     private static final String STATUS_ON_HOLD = "ON_HOLD";
     private static final String STATUS_REJECTED = "REJECTED";
     private static final String STATUS_APPROVED = "APPROVED";
+    private static final String STATUS_COMPLETED = "COMPLETED";
     private static final String STATUS_WAITING = "WAITING_FOR_PACS002";
+    private static final String STATUS_SUCCESS = "SUCCESS";
 
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
@@ -86,23 +88,7 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional(readOnly = true)
     public String getEmployeeTransactionPacs008Xml(Long transactionId) {
-        Transaction transaction = getTransaction(transactionId);
-        String status = transaction.getTransactionStatus();
-
-        if (STATUS_PENDING.equalsIgnoreCase(status)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Employee approval is required to generate PACS.008 XML");
-        }
-        if (STATUS_REJECTED.equalsIgnoreCase(status)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Transaction rejected. PACS.008 XML was not generated.");
-        }
-        if (!STATUS_APPROVED.equalsIgnoreCase(status)
-                && !STATUS_WAITING.equalsIgnoreCase(status)
-                && !"SUCCESS".equalsIgnoreCase(status)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "PACS.008 XML is not available for transaction status " + status);
-        }
+        getTransaction(transactionId);
 
         return pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(transactionId)
                 .map(pacs008 -> {
@@ -220,6 +206,8 @@ public class TransactionServiceImpl implements TransactionService {
     }
 
     private TransactionDetailResponse toEmployeeTransactionDetailResponse(Transaction transaction) {
+        Transaction currentTransaction = transactionRepository.findById(transaction.getTransactionId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
         Account senderAccount = accountRepository.findByAccountNumber(transaction.getAccountNumber())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -233,7 +221,8 @@ public class TransactionServiceImpl implements TransactionService {
                         "Beneficiary not found for account number " + transaction.getBeneficiaryAccountNumber()));
 
         return TransactionDetailResponse.builder()
-                .transactionId(transaction.getTransactionId())
+                .transactionId(currentTransaction.getTransactionId())
+                .status(currentTransaction.getTransactionStatus())
                 .senderDetails(TransactionDetailResponse.SenderDetails.builder()
                         .senderName(senderUser != null ? senderUser.getUserName() : null)
                         .senderAccountNumber(senderAccount.getAccountNumber())
@@ -249,13 +238,28 @@ public class TransactionServiceImpl implements TransactionService {
                         .receiverCountry(normalizeCountry(beneficiary.getCountryCode()))
                         .build())
                 .paymentDetails(TransactionDetailResponse.PaymentDetails.builder()
-                        .transactionReference(String.valueOf(transaction.getTransactionId()))
-                        .amount(transaction.getAmount())
-                        .paymentDate(transaction.getTransactionDateTime())
-                        .status(transaction.getTransactionStatus())
+                        .transactionReference(String.valueOf(currentTransaction.getTransactionId()))
+                        .amount(currentTransaction.getAmount())
+                        .paymentDate(currentTransaction.getTransactionDateTime())
+                        .status(currentTransaction.getTransactionStatus())
                         .channel(CHANNEL_FEDWIRE)
                         .build())
+                .xmlMessages(TransactionDetailResponse.XmlMessages.builder()
+                        .pacs008(findEmployeeTransactionPacs008Xml(currentTransaction.getTransactionId()).orElse(null))
+                        .pacs002(findEmployeeTransactionPacs002Xml(currentTransaction.getTransactionId()).orElse(null))
+                        .admi002(findEmployeeTransactionAdmi002Xml(currentTransaction.getTransactionId()).orElse(null))
+                        .build())
                 .build();
+    }
+
+    private Optional<String> findEmployeeTransactionPacs008Xml(Long transactionId) {
+        if (transactionId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "transactionId is required");
+        }
+
+        return pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(transactionId)
+                .map(PACS008::getXmlPayload)
+                .filter(xml -> xml != null && !xml.isBlank());
     }
 
     private Transaction getTransaction(Long transactionId) {
@@ -269,9 +273,10 @@ public class TransactionServiceImpl implements TransactionService {
 
     private boolean isFinalStatus(String status) {
         return STATUS_APPROVED.equalsIgnoreCase(status)
+                || STATUS_COMPLETED.equalsIgnoreCase(status)
                 || STATUS_REJECTED.equalsIgnoreCase(status)
                 || STATUS_WAITING.equalsIgnoreCase(status)
-                || "SUCCESS".equalsIgnoreCase(status);
+                || STATUS_SUCCESS.equalsIgnoreCase(status);
     }
 
     private String normalizeCountry(String countryCode) {

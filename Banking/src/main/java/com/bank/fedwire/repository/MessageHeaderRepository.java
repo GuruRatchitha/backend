@@ -11,5 +11,9 @@ public interface MessageHeaderRepository extends JpaRepository<MessageHeader, St
 
     Optional<MessageHeader> findByTransactionId(Long transactionId);
 
+    Optional<MessageHeader> findByMessageId(String messageId);
+
+    Optional<MessageHeader> findByBusinessMessageId(String businessMessageId);
+
     Optional<MessageHeader> findTopByTransactionIdOrderByCreatedDateDesc(Long transactionId);
 }

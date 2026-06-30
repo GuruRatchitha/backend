@@ -1,5 +1,6 @@
 package com.bank.fedwire.controller;
 
+import com.bank.fedwire.dto.BeneficiaryCreateResponse;
 import com.bank.fedwire.dto.BeneficiaryResponse;
 import com.bank.fedwire.service.BeneficiaryService;
 import lombok.RequiredArgsConstructor;
@@ -51,11 +52,29 @@ public class EmployeeBeneficiaryController {
         return ResponseEntity.ok(beneficiaryService.approveBeneficiary(beneficiaryId));
     }
 
+    @PutMapping("/{userId}/{accountNumber}/{routingNumber}/approve")
+    public ResponseEntity<BeneficiaryCreateResponse> approveBeneficiary(
+            @PathVariable Long userId,
+            @PathVariable String accountNumber,
+            @PathVariable String routingNumber) {
+        return ResponseEntity.ok(beneficiaryService.approveBeneficiary(userId, accountNumber, routingNumber));
+    }
+
     @PutMapping("/{beneficiaryId}/reject")
     public ResponseEntity<BeneficiaryResponse> rejectBeneficiary(
             @PathVariable Long beneficiaryId,
             @RequestBody(required = false) Map<String, String> request) {
         String rejectionReason = request != null ? request.get("rejectionReason") : null;
         return ResponseEntity.ok(beneficiaryService.rejectBeneficiary(beneficiaryId, rejectionReason));
+    }
+
+    @PutMapping("/{userId}/{accountNumber}/{routingNumber}/reject")
+    public ResponseEntity<BeneficiaryCreateResponse> rejectBeneficiary(
+            @PathVariable Long userId,
+            @PathVariable String accountNumber,
+            @PathVariable String routingNumber,
+            @RequestBody(required = false) Map<String, String> request) {
+        String rejectionReason = request != null ? request.get("rejectionReason") : null;
+        return ResponseEntity.ok(beneficiaryService.rejectBeneficiary(userId, accountNumber, routingNumber, rejectionReason));
     }
 }

@@ -17,4 +17,5 @@ public class AwsProperties {
     private String region;
     private String topicArn;
     private String pacs002QueueUrl;
+    private String admi002QueueUrl;
 }

@@ -35,7 +35,9 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
     public BeneficiaryCreateResponse addBeneficiary(Long userId, BeneficiaryRequest request) {
         validateRequest(request);
 
-        String accountNumber = request.getAccountNumber().trim();
+        // TEMPORARY FOR PAYAPT ADM.002 TESTING
+        String accountNumber = request.getAccountNumber();
+        // END TEMPORARY
         if (beneficiaryRepository.existsByUserIdAndAccountNumber(userId, accountNumber)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Beneficiary already exists for this account number");
         }
@@ -50,7 +52,9 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
                 .townName(request.getTownName().trim())
                 .countryCode("US")
                 .accountNumber(accountNumber)
-                .routingNumber(request.getRoutingNumber().trim())
+                // TEMPORARY FOR PAYAPT ADM.002 TESTING
+                .routingNumber(request.getRoutingNumber())
+                // END TEMPORARY
                 .bankName(normalizeBankName(request.getBankName()))
                 .status(STATUS_PENDING)
                 .build();

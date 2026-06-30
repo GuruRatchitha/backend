@@ -51,6 +51,14 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         addColumnIfMissing("transactions", "beneficiary_account_number", "ALTER TABLE transactions ADD COLUMN beneficiary_account_number VARCHAR(255) NULL");
         addColumnIfMissing("transactions", "beneficiary_routing_number", "ALTER TABLE transactions ADD COLUMN beneficiary_routing_number VARCHAR(255) NULL");
         addColumnIfMissing("transactions", "pending_payment_key", "ALTER TABLE transactions ADD COLUMN pending_payment_key VARCHAR(64) NULL");
+        // TEMPORARY FOR PAYAPT ADM.002 TESTING
+        alterColumnIfExists("transactions", "amount",
+                "ALTER TABLE transactions MODIFY COLUMN amount DECIMAL(65, 2) NOT NULL");
+        alterColumnIfExists("transactions", "beneficiary_account_number",
+                "ALTER TABLE transactions MODIFY COLUMN beneficiary_account_number VARCHAR(1024) NOT NULL");
+        alterColumnIfExists("transactions", "beneficiary_routing_number",
+                "ALTER TABLE transactions MODIFY COLUMN beneficiary_routing_number VARCHAR(1024) NOT NULL");
+        // END TEMPORARY
         addUniqueIndexIfMissing("transactions", "uk_transactions_pending_payment_key",
                 "ALTER TABLE transactions ADD CONSTRAINT uk_transactions_pending_payment_key UNIQUE (pending_payment_key)");
     }
@@ -76,6 +84,12 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         dropColumnIfExists("pacs008", "instd_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN instd_agt_mmb_id");
         dropColumnIfExists("pacs008", "dbtr_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN dbtr_agt_mmb_id");
         dropColumnIfExists("pacs008", "cdtr_agt_mmb_id", "ALTER TABLE pacs008 DROP COLUMN cdtr_agt_mmb_id");
+        // TEMPORARY FOR PAYAPT ADM.002 TESTING
+        alterColumnIfExists("pacs008", "amount",
+                "ALTER TABLE pacs008 MODIFY COLUMN amount DECIMAL(65, 2) NOT NULL");
+        alterColumnIfExists("pacs008", "creditor_account",
+                "ALTER TABLE pacs008 MODIFY COLUMN creditor_account VARCHAR(1024) NOT NULL");
+        // END TEMPORARY
         addUniqueIndexIfMissing("pacs008", "uk_pacs008_transaction_id",
                 "ALTER TABLE pacs008 ADD CONSTRAINT uk_pacs008_transaction_id UNIQUE (transaction_id)");
     }
@@ -101,9 +115,11 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                         settlement_transaction_id BIGINT NOT NULL AUTO_INCREMENT,
                         payment_id BIGINT NOT NULL,
                         sender_account VARCHAR(255) NOT NULL,
-                        beneficiary_account VARCHAR(255) NOT NULL,
+                        beneficiary_account VARCHAR(1024) NOT NULL,
                         settlement_account VARCHAR(255) NOT NULL,
-                        amount DECIMAL(19, 2) NOT NULL,
+                        -- TEMPORARY FOR PAYAPT ADM.002 TESTING
+                        amount DECIMAL(65, 2) NOT NULL,
+                        -- END TEMPORARY
                         transaction_type VARCHAR(32) NOT NULL,
                         status VARCHAR(16) NOT NULL,
                         pacs008_message_id VARCHAR(22) NULL,
@@ -114,6 +130,12 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                     )
                     """);
         }
+        // TEMPORARY FOR PAYAPT ADM.002 TESTING
+        alterColumnIfExists("settlement_transactions", "beneficiary_account",
+                "ALTER TABLE settlement_transactions MODIFY COLUMN beneficiary_account VARCHAR(1024) NOT NULL");
+        alterColumnIfExists("settlement_transactions", "amount",
+                "ALTER TABLE settlement_transactions MODIFY COLUMN amount DECIMAL(65, 2) NOT NULL");
+        // END TEMPORARY
     }
 
     private void ensurePacs002Columns() {
@@ -123,8 +145,18 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
     }
 
     private void ensureAdmi002Columns() {
+        dropForeignKeysForColumn("adm002", "message_id");
+        addColumnIfMissing("adm002", "message_id", "ALTER TABLE adm002 ADD COLUMN message_id VARCHAR(64) NULL AFTER adm002_id");
+        addColumnIfMissing("adm002", "original_message_id", "ALTER TABLE adm002 ADD COLUMN original_message_id VARCHAR(64) NULL AFTER message_id");
         addColumnIfMissing("adm002", "original_reference", "ALTER TABLE adm002 ADD COLUMN original_reference VARCHAR(255) NULL AFTER adm002_id");
-        addColumnIfMissing("adm002", "business_message_id", "ALTER TABLE adm002 ADD COLUMN business_message_id VARCHAR(22) NULL AFTER original_reference");
+        addColumnIfMissing("adm002", "business_message_id", "ALTER TABLE adm002 ADD COLUMN business_message_id VARCHAR(64) NULL AFTER original_reference");
+        alterColumnIfExists("adm002", "business_message_id",
+                "ALTER TABLE adm002 MODIFY COLUMN business_message_id VARCHAR(64) NULL");
+        addColumnIfMissing("adm002", "related_message_id", "ALTER TABLE adm002 ADD COLUMN related_message_id VARCHAR(64) NULL AFTER business_message_id");
+        addColumnIfMissing("adm002", "error_code", "ALTER TABLE adm002 ADD COLUMN error_code VARCHAR(255) NULL AFTER related_message_id");
+        addColumnIfMissing("adm002", "error_description", "ALTER TABLE adm002 ADD COLUMN error_description VARCHAR(1000) NULL AFTER error_code");
+        addColumnIfMissing("adm002", "severity", "ALTER TABLE adm002 ADD COLUMN severity VARCHAR(64) NULL AFTER error_description");
+        addColumnIfMissing("adm002", "creation_datetime", "ALTER TABLE adm002 ADD COLUMN creation_datetime DATETIME(6) NULL AFTER severity");
         addColumnIfMissing("adm002", "reject_reason_code", "ALTER TABLE adm002 ADD COLUMN reject_reason_code VARCHAR(255) NULL AFTER business_message_id");
         addColumnIfMissing("adm002", "reject_reason_description", "ALTER TABLE adm002 ADD COLUMN reject_reason_description VARCHAR(1000) NULL AFTER reject_reason_code");
         addColumnIfMissing("adm002", "rejection_date_time", "ALTER TABLE adm002 ADD COLUMN rejection_date_time DATETIME(6) NULL AFTER reject_reason_description");
@@ -165,14 +197,16 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                     uetr VARCHAR(36) NOT NULL,
                     payment_transaction_id VARCHAR(35) NOT NULL,
                     bank_transaction_id VARCHAR(22) NOT NULL,
-                    amount DECIMAL(19, 2) NOT NULL,
+                    -- TEMPORARY FOR PAYAPT ADM.002 TESTING
+                    amount DECIMAL(65, 2) NOT NULL,
+                    -- END TEMPORARY
                     currency VARCHAR(3) NOT NULL,
                     debtor_name VARCHAR(140) NOT NULL,
                     debtor_account VARCHAR(255) NOT NULL,
                     debtor_town VARCHAR(35) NOT NULL,
                     debtor_country VARCHAR(2) NOT NULL,
                     creditor_name VARCHAR(140) NOT NULL,
-                    creditor_account VARCHAR(255) NOT NULL,
+                    creditor_account VARCHAR(1024) NOT NULL,
                     creditor_town VARCHAR(35) NOT NULL,
                     creditor_country VARCHAR(2) NOT NULL,
                     settlement_date DATE NOT NULL,
@@ -206,8 +240,15 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         jdbcTemplate.execute("""
                 CREATE TABLE adm002 (
                     adm002_id BIGINT NOT NULL AUTO_INCREMENT,
+                    message_id VARCHAR(64) NULL,
+                    original_message_id VARCHAR(64) NULL,
                     original_reference VARCHAR(255) NULL,
-                    business_message_id VARCHAR(22) NULL,
+                    business_message_id VARCHAR(64) NULL,
+                    related_message_id VARCHAR(64) NULL,
+                    error_code VARCHAR(255) NULL,
+                    error_description VARCHAR(1000) NULL,
+                    severity VARCHAR(64) NULL,
+                    creation_datetime DATETIME(6) NULL,
                     reject_reason_code VARCHAR(255) NULL,
                     reject_reason_description VARCHAR(1000) NULL,
                     rejection_date_time DATETIME(6) NULL,
@@ -228,6 +269,12 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
     }
 
     private void dropColumnIfExists(String tableName, String columnName, String ddl) {
+        if (columnExists(tableName, columnName)) {
+            jdbcTemplate.execute(ddl);
+        }
+    }
+
+    private void alterColumnIfExists(String tableName, String columnName, String ddl) {
         if (columnExists(tableName, columnName)) {
             jdbcTemplate.execute(ddl);
         }

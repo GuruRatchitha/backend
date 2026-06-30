@@ -79,12 +79,12 @@ class EmployeeTransactionControllerTest {
         when(transactionService.getEmployeeTransactionQueue()).thenReturn(List.of(
                 EmployeeTransactionQueueResponse.builder()
                         .transactionId(1L)
-                        .status("PROCESSING")
+                        .status("REJECTED")
                         .build()));
 
         ResponseEntity<List<EmployeeTransactionQueueResponse>> response = controller.getQueue();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("PROCESSING", response.getBody().get(0).getStatus());
+        assertEquals("REJECTED", response.getBody().get(0).getStatus());
     }
 }

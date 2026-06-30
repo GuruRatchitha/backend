@@ -40,13 +40,17 @@ public class SettlementTransaction {
     @Column(name = "sender_account", nullable = false, length = 255)
     private String senderAccount;
 
-    @Column(name = "beneficiary_account", nullable = false, length = 255)
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    @Column(name = "beneficiary_account", nullable = false, length = 1024)
+    // END TEMPORARY
     private String beneficiaryAccount;
 
     @Column(name = "settlement_account", nullable = false, length = 255)
     private String settlementAccount;
 
-    @Column(nullable = false, precision = 19, scale = 2)
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    @Column(nullable = false, precision = 65, scale = 2)
+    // END TEMPORARY
     private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)

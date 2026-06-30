@@ -128,7 +128,7 @@ public class Pacs002ProcessingService {
     }
 
     private boolean isSettlementStatus(String status) {
-        return "ACCP".equals(status) || "RJCT".equals(status);
+        return "ACSC".equals(status) || "ACCP".equals(status) || "RJCT".equals(status);
     }
 
     private String normalizeStatus(String status) {
@@ -141,7 +141,7 @@ public class Pacs002ProcessingService {
             return "RJCT";
         }
         if (value.contains("ACSC")) {
-            return "ACCP";
+            return "ACSC";
         }
         if (value.contains("ACCP")) {
             return "ACCP";

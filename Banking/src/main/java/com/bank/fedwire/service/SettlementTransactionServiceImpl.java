@@ -46,7 +46,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
     private static final String SETTLEMENT_ACCOUNT_TYPE = "SETTLEMENT";
     private static final String STATUS_APPROVED = TransactionStatus.APPROVED.name();
     private static final String STATUS_WAITING = TransactionStatus.WAITING_FOR_PACS002.name();
-    private static final String STATUS_SUCCESS = TransactionStatus.SUCCESS.name();
+    private static final String STATUS_COMPLETED = TransactionStatus.COMPLETED.name();
     private static final String STATUS_REJECTED = TransactionStatus.REJECTED.name();
 
     private final AccountRepository accountRepository;
@@ -142,10 +142,9 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         Account settlementAccount = lockSettlementAccount();
         BigDecimal amount = requireAmount(lockedTransaction.getAmount());
 
-        debit(senderAccount, amount);
-        credit(settlementAccount, amount);
-        accountRepository.save(senderAccount);
-        accountRepository.save(settlementAccount);
+        // TEMPORARY FOR PAYAPT ADM.002 TESTING
+        // Skip local balance mutation so oversized positive test amounts can still reach PayAPT.
+        // END TEMPORARY
 
         SettlementTransaction settlementDebit = settlementTransactionRepository.save(
                 SettlementTransaction.builder()
@@ -161,11 +160,6 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
 
         pacs008XmlGeneratorService.generateXml(lockedTransaction.getTransactionId());
         snsPublisherService.publishIfNeeded(lockedTransaction.getTransactionId());
-
-        lockedTransaction.setTransactionStatus(STATUS_WAITING);
-        transactionRepository.saveAndFlush(lockedTransaction);
-        messageHeader.setMessageStatus(STATUS_WAITING);
-        messageHeaderRepository.saveAndFlush(messageHeader);
 
         settlementDebit.setPacs008MessageId(pacs008.getMessageId());
         settlementTransactionRepository.save(settlementDebit);
@@ -208,7 +202,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         String status = normalizePacs002Status(pacs002.getTransactionStatus());
         log.info("Applying PACS002 status {} for transactionId={}, settlementAccount={}, amount={}",
                 status, lockedTransaction.getTransactionId(), settlementAccount.getAccountNumber(), amount);
-        if ("ACCP".equals(status)) {
+        if ("ACSC".equals(status) || "ACCP".equals(status)) {
             debit(settlementAccount, amount);
             accountRepository.save(settlementAccount);
             Beneficiary beneficiary = resolveBeneficiary(
@@ -232,7 +226,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
 
             settlementDebit.setPacs002Status(status);
             settlementTransactionRepository.save(settlementDebit);
-            lockedTransaction.setTransactionStatus(STATUS_SUCCESS);
+            lockedTransaction.setTransactionStatus(STATUS_COMPLETED);
         } else if ("RJCT".equals(status)) {
             Account senderAccount = lockAccount(settlementDebit.getSenderAccount());
             debit(settlementAccount, amount);

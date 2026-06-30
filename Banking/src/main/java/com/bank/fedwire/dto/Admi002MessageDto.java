@@ -17,9 +17,23 @@ public class Admi002MessageDto {
 
     private String messageType;
 
+    private String messageId;
+
+    private String originalMessageId;
+
     private String businessMessageId;
 
+    private String relatedMessageId;
+
     private String originalReference;
+
+    private String errorCode;
+
+    private String errorDescription;
+
+    private String severity;
+
+    private LocalDateTime creationDateTime;
 
     private String rejectReasonCode;
 

@@ -1,0 +1,168 @@
+package com.bank.fedwire.service;
+
+import com.bank.fedwire.dto.TransactionDetailResponse;
+import com.bank.fedwire.dto.EmployeeTransactionQueueResponse;
+import com.bank.fedwire.entity.Account;
+import com.bank.fedwire.entity.ADMI002;
+import com.bank.fedwire.entity.Beneficiary;
+import com.bank.fedwire.entity.PACS002;
+import com.bank.fedwire.entity.PACS008;
+import com.bank.fedwire.entity.Transaction;
+import com.bank.fedwire.entity.User;
+import com.bank.fedwire.repository.ADMI002Repository;
+import com.bank.fedwire.repository.AccountRepository;
+import com.bank.fedwire.repository.BeneficiaryRepository;
+import com.bank.fedwire.repository.DashboardActivityRepository;
+import com.bank.fedwire.repository.MessageHeaderRepository;
+import com.bank.fedwire.repository.PACS002Repository;
+import com.bank.fedwire.repository.PACS008Repository;
+import com.bank.fedwire.repository.TransactionRepository;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class TransactionServiceImplTest {
+
+    @Mock
+    private TransactionRepository transactionRepository;
+
+    @Mock
+    private AccountRepository accountRepository;
+
+    @Mock
+    private BeneficiaryRepository beneficiaryRepository;
+
+    @Mock
+    private MessageHeaderRepository messageHeaderRepository;
+
+    @Mock
+    private PACS002Repository pacs002Repository;
+
+    @Mock
+    private ADMI002Repository admi002Repository;
+
+    @Mock
+    private PACS008Repository pacs008Repository;
+
+    @Mock
+    private SettlementTransactionService settlementTransactionService;
+
+    @Mock
+    private DashboardActivityRepository dashboardActivityRepository;
+
+    @InjectMocks
+    private TransactionServiceImpl transactionService;
+
+    @Test
+    void detailsIncludesPacs008AndPacs002ForRejectedPayment() {
+        Transaction transaction = baseTransaction("REJECTED");
+        mockDetailDependencies(transaction);
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L))
+                .thenReturn(Optional.of(PACS008.builder().xmlPayload("<PACS008/>").build()));
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L))
+                .thenReturn(Optional.of(PACS002.builder().xmlPayload("<PACS002><TxSts>RJCT</TxSts></PACS002>").build()));
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals("REJECTED", response.getStatus());
+        assertEquals("REJECTED", response.getPaymentDetails().getStatus());
+        assertEquals("<PACS008/>", response.getXmlMessages().getPacs008());
+        assertEquals("<PACS002><TxSts>RJCT</TxSts></PACS002>", response.getXmlMessages().getPacs002());
+        assertNull(response.getXmlMessages().getAdmi002());
+    }
+
+    @Test
+    void detailsIncludesPacs008AndAdmi002ForSyntaxFailure() {
+        Transaction transaction = baseTransaction("REJECTED");
+        mockDetailDependencies(transaction);
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L))
+                .thenReturn(Optional.of(PACS008.builder().xmlPayload("<PACS008/>").build()));
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L))
+                .thenReturn(Optional.of(ADMI002.builder().xmlPayload("<ADMI002/>").build()));
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals("REJECTED", response.getStatus());
+        assertEquals("<PACS008/>", response.getXmlMessages().getPacs008());
+        assertNull(response.getXmlMessages().getPacs002());
+        assertEquals("<ADMI002/>", response.getXmlMessages().getAdmi002());
+    }
+
+    @Test
+    void detailsReturnsCurrentTransactionStatusFromRecord() {
+        Transaction transaction = baseTransaction("COMPLETED");
+        mockDetailDependencies(transaction);
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L)).thenReturn(Optional.empty());
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals("COMPLETED", response.getStatus());
+        assertEquals("COMPLETED", response.getPaymentDetails().getStatus());
+    }
+
+    @Test
+    void queueReturnsCurrentTransactionStatusesFromRepository() {
+        List<EmployeeTransactionQueueResponse> queue = List.of(
+                EmployeeTransactionQueueResponse.builder().transactionId(1L).status("PENDING").build(),
+                EmployeeTransactionQueueResponse.builder().transactionId(2L).status("APPROVED").build(),
+                EmployeeTransactionQueueResponse.builder().transactionId(3L).status("REJECTED").build(),
+                EmployeeTransactionQueueResponse.builder().transactionId(4L).status("COMPLETED").build());
+        when(transactionRepository.findEmployeeTransactionQueue()).thenReturn(queue);
+
+        List<EmployeeTransactionQueueResponse> response = transactionService.getEmployeeTransactionQueue();
+
+        assertEquals("PENDING", response.get(0).getStatus());
+        assertEquals("APPROVED", response.get(1).getStatus());
+        assertEquals("REJECTED", response.get(2).getStatus());
+        assertEquals("COMPLETED", response.get(3).getStatus());
+    }
+
+    private void mockDetailDependencies(Transaction transaction) {
+        when(transactionRepository.findById(49L)).thenReturn(Optional.of(transaction));
+        when(accountRepository.findByAccountNumber("11111111111")).thenReturn(Optional.of(Account.builder()
+                .accountNumber("11111111111")
+                .routingNumber("021000021")
+                .currency("USD")
+                .user(User.builder()
+                        .userName("Sender")
+                        .countryCode("US")
+                        .build())
+                .build()));
+        when(beneficiaryRepository.findByAccountNumberAndRoutingNumber("22222222222", "031000503"))
+                .thenReturn(Optional.of(Beneficiary.builder()
+                        .beneficiaryName("Receiver")
+                        .accountNumber("22222222222")
+                        .routingNumber("031000503")
+                        .countryCode("US")
+                        .build()));
+    }
+
+    private Transaction baseTransaction(String status) {
+        return Transaction.builder()
+                .transactionId(49L)
+                .accountNumber("11111111111")
+                .beneficiaryName("Receiver")
+                .beneficiaryAccountNumber("22222222222")
+                .beneficiaryRoutingNumber("031000503")
+                .amount(new BigDecimal("125.00"))
+                .transactionDateTime(LocalDateTime.of(2026, 6, 30, 10, 0))
+                .transactionStatus(status)
+                .build();
+    }
+}

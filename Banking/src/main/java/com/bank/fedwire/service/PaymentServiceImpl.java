@@ -122,7 +122,9 @@ public class PaymentServiceImpl implements PaymentService {
                 .debtorTown(requireSnapshotValue(sender.getTownName(), "Sender town name is required"))
                 .debtorCountry(normalizeCountry(sender.getCountryCode()))
                 .creditorName(requireSnapshotValue(beneficiary.getBeneficiaryName(), "Beneficiary name is required"))
-                .creditorAccount(requireSnapshotValue(beneficiary.getAccountNumber(), "Beneficiary account number is required"))
+                // TEMPORARY FOR PAYAPT ADM.002 TESTING
+                .creditorAccount(requireRawSnapshotValue(beneficiary.getAccountNumber(), "Beneficiary account number is required"))
+                // END TEMPORARY
                 .creditorTown(requireSnapshotValue(beneficiary.getTownName(), "Beneficiary town name is required"))
                 .creditorCountry(normalizeCountry(beneficiary.getCountryCode()))
                 .settlementDate(now.toLocalDate())
@@ -239,4 +241,13 @@ public class PaymentServiceImpl implements PaymentService {
         }
         return value.trim();
     }
+
+    // TEMPORARY FOR PAYAPT ADM.002 TESTING
+    private String requireRawSnapshotValue(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        return value;
+    }
+    // END TEMPORARY
 }

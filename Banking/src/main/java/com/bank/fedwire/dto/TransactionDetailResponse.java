@@ -18,11 +18,15 @@ public class TransactionDetailResponse {
 
     private Long transactionId;
 
+    private String status;
+
     private SenderDetails senderDetails;
 
     private ReceiverDetails receiverDetails;
 
     private PaymentDetails paymentDetails;
+
+    private XmlMessages xmlMessages;
 
     @Getter
     @Setter
@@ -61,5 +65,16 @@ public class TransactionDetailResponse {
         private LocalDateTime paymentDate;
         private String status;
         private String channel;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class XmlMessages {
+        private String pacs008;
+        private String pacs002;
+        private String admi002;
     }
 }

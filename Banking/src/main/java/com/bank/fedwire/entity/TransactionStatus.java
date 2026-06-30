@@ -8,5 +8,7 @@ public enum TransactionStatus {
     FAILED,
     PENDING,
     WAITING_FOR_PACS002,
-    SUCCESS
+    SUCCESS,
+    ADMI002_RECEIVED,
+    INVALID_MESSAGE
 }

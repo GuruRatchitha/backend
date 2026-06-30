@@ -38,19 +38,37 @@ public class Admi002XmlParserService {
             Document document = factory.newDocumentBuilder().parse(new InputSource(new StringReader(xmlPayload)));
             document.getDocumentElement().normalize();
 
+            String relatedMessageId = firstNonBlank(
+                    findFirstText(document, "related_message_id", "RltdMsgId"),
+                    findNestedText(document, "RltdRef", "Ref"));
+            String errorCode = firstNonBlank(
+                    findFirstText(document, "error_code", "ErrCd"),
+                    findNestedText(document, "RjctgPtyRsn", "Cd", "Prtry"));
+            String errorDescription = firstNonBlank(
+                    findFirstText(document, "error_description", "ErrDesc"),
+                    findNestedText(document, "RjctgPtyRsn", "RsnDesc", "Desc", "AddtlInf"));
+            LocalDateTime creationDateTime = parseDateTime(findFirstText(document, "creation_datetime", "CreDtTm", "CreDt"));
             Admi002MessageDto dto = Admi002MessageDto.builder()
                     .messageType(findFirstText(document, "MsgDefIdr"))
-                    .businessMessageId(findFirstText(document, "BizMsgIdr"))
-                    .originalReference(findNestedText(document, "RltdRef", "Ref"))
-                    .rejectReasonCode(findNestedText(document, "RjctgPtyRsn", "Cd", "Prtry"))
-                    .rejectReasonDescription(findNestedText(document, "RjctgPtyRsn", "RsnDesc", "Desc", "AddtlInf"))
+                    .messageId(findFirstText(document, "message_id", "MsgId"))
+                    .originalMessageId(findFirstText(document,
+                            "original_message_id", "OrgnlMsgId", "OrgnlBizMsgIdr"))
+                    .businessMessageId(findFirstText(document, "business_message_id", "BizMsgIdr"))
+                    .relatedMessageId(relatedMessageId)
+                    .originalReference(relatedMessageId)
+                    .errorCode(errorCode)
+                    .errorDescription(errorDescription)
+                    .severity(findFirstText(document, "severity", "Svrty", "Severity"))
+                    .creationDateTime(creationDateTime)
+                    .rejectReasonCode(errorCode)
+                    .rejectReasonDescription(errorDescription)
                     .rejectionDateTime(parseDateTime(findFirstText(document, "RjctnDtTm")))
                     .xmlPayload(xmlPayload)
                     .build();
 
-            log.info("ADMI002 XML parsed messageType={}, businessMessageId={}, originalReference={}, rejectReasonCode={}, rejectionDateTime={}",
-                    dto.getMessageType(), dto.getBusinessMessageId(), dto.getOriginalReference(),
-                    dto.getRejectReasonCode(), dto.getRejectionDateTime());
+            log.info("ADMI002 XML parsed successfully messageType={}, messageId={}, originalMessageId={}, businessMessageId={}, relatedMessageId={}, errorCode={}, severity={}, creationDateTime={}",
+                    dto.getMessageType(), dto.getMessageId(), dto.getOriginalMessageId(), dto.getBusinessMessageId(),
+                    dto.getRelatedMessageId(), dto.getErrorCode(), dto.getSeverity(), dto.getCreationDateTime());
             return dto;
         } catch (Exception ex) {
             log.error("Malformed ADMI002 XML payload length={}, payload={}",
@@ -127,6 +145,15 @@ public class Admi002XmlParserService {
                 return null;
             }
         }
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String abbreviate(String value) {

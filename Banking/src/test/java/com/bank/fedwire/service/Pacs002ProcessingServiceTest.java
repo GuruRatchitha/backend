@@ -128,7 +128,7 @@ class Pacs002ProcessingServiceTest {
     }
 
     @Test
-    void processTreatsAcsCAsAcceptedSettlementCompleted() {
+    void processTreatsAcscAsAcceptedSettlementCompleted() {
         String xml = "<Document><transfer_id>TRF-123</transfer_id>"
                 + "<transaction_status>ACSC</transaction_status>"
                 + "<reason_code>ACSP</reason_code></Document>";
@@ -157,7 +157,7 @@ class Pacs002ProcessingServiceTest {
 
         PACS002 saved = captor.getValue();
         assertEquals(100L, saved.getTransactionId());
-        assertEquals("ACCP", saved.getTransactionStatus());
+        assertEquals("ACSC", saved.getTransactionStatus());
         assertEquals("ACSP", saved.getReasonCode());
         verify(settlementTransactionService).processPacs002(transaction, saved);
     }
@@ -195,7 +195,7 @@ class Pacs002ProcessingServiceTest {
         assertEquals("FEDWIRE-STATUS-1", saved.getMessageId());
         assertEquals("UNKNOWN-PACS008", saved.getOriginalMessageId());
         assertEquals("UNKNOWN-TX", saved.getTransferId());
-        assertEquals("ACCP", saved.getTransactionStatus());
+        assertEquals("ACSC", saved.getTransactionStatus());
         assertEquals(xml, saved.getXmlPayload());
         assertEquals(null, saved.getTransactionId());
         verify(settlementTransactionService, never()).processPacs002(any(), any());
