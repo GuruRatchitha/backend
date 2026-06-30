@@ -1,5 +1,6 @@
 package com.bank.fedwire.config;
 
+import com.bank.fedwire.util.RoutingNumberGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -8,12 +9,18 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 @Component
 @RequiredArgsConstructor
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class PaymentSchemaInitializer implements ApplicationRunner {
 
     private final JdbcTemplate jdbcTemplate;
+    private final RoutingNumberGenerator routingNumberGenerator;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -44,8 +51,44 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         dropColumnIfExists("account", "customer_id", "ALTER TABLE account DROP COLUMN customer_id");
         dropColumnIfExists("account", "initial_balance", "ALTER TABLE account DROP COLUMN initial_balance");
         addColumnIfMissing("account", "account_name", "ALTER TABLE account ADD COLUMN account_name VARCHAR(255) NULL AFTER account_number");
-        addColumnIfMissing("account", "routing_number", "ALTER TABLE account ADD COLUMN routing_number VARCHAR(255) NULL AFTER iban");
+        addColumnIfMissing("account", "routing_number", "ALTER TABLE account ADD COLUMN routing_number VARCHAR(9) NULL AFTER iban");
+        ensureAccountRoutingNumbers();
+        jdbcTemplate.execute("ALTER TABLE account MODIFY COLUMN routing_number VARCHAR(9) NOT NULL");
+        addUniqueIndexIfMissing("account", "uk_account_routing_number",
+                "ALTER TABLE account ADD CONSTRAINT uk_account_routing_number UNIQUE (routing_number)");
         addColumnIfMissing("account", "updated_date", "ALTER TABLE account ADD COLUMN updated_date DATETIME(6) NULL AFTER balance");
+    }
+
+    private void ensureAccountRoutingNumbers() {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT account_id, routing_number
+                FROM account
+                ORDER BY account_id
+                """);
+        Set<String> usedRoutingNumbers = new HashSet<>();
+        for (Map<String, Object> row : rows) {
+            Object routingNumberValue = row.get("routing_number");
+            String routingNumber = routingNumberValue != null ? routingNumberValue.toString().trim() : null;
+            if (routingNumber != null && routingNumber.matches("\\d{9}") && usedRoutingNumbers.add(routingNumber)) {
+                continue;
+            }
+
+            String generatedRoutingNumber = generateUniqueRoutingNumber(usedRoutingNumbers);
+            jdbcTemplate.update(
+                    "UPDATE account SET routing_number = ? WHERE account_id = ?",
+                    generatedRoutingNumber,
+                    row.get("account_id"));
+        }
+    }
+
+    private String generateUniqueRoutingNumber(Set<String> usedRoutingNumbers) {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            String routingNumber = routingNumberGenerator.generate();
+            if (usedRoutingNumbers.add(routingNumber)) {
+                return routingNumber;
+            }
+        }
+        throw new IllegalStateException("Unable to generate a unique routing number for existing accounts.");
     }
 
     private void ensureBeneficiaryIdColumn() {

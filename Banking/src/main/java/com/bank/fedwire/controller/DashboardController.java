@@ -2,6 +2,7 @@ package com.bank.fedwire.controller;
 
 import com.bank.fedwire.dto.AccountStatisticsResponse;
 import com.bank.fedwire.dto.DashboardApiResponse;
+import com.bank.fedwire.dto.DashboardSettlementTransactionResponse;
 import com.bank.fedwire.dto.DashboardSummaryResponse;
 import com.bank.fedwire.dto.PendingBeneficiaryResponse;
 import com.bank.fedwire.dto.PendingTransactionResponse;
@@ -63,6 +64,13 @@ public class DashboardController {
     public ResponseEntity<DashboardApiResponse<List<RecentActivityResponse>>> getRecentActivity(
             @RequestHeader("X-User-Id") Long employeeUserId) {
         return ok("Recent activity retrieved successfully.", dashboardService.getRecentActivities(employeeUserId));
+    }
+
+    @GetMapping("/recent-settlement-transactions")
+    public ResponseEntity<DashboardApiResponse<List<DashboardSettlementTransactionResponse>>> getRecentSettlementTransactions(
+            @RequestHeader("X-User-Id") Long employeeUserId) {
+        return ok("Recent settlement transactions retrieved successfully.",
+                dashboardService.getRecentSettlementTransactions(employeeUserId));
     }
 
     private <T> ResponseEntity<DashboardApiResponse<T>> ok(String message, T data) {

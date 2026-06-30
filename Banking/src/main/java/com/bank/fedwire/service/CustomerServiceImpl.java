@@ -19,6 +19,7 @@ import com.bank.fedwire.repository.RoleRepository;
 import com.bank.fedwire.repository.UserRepository;
 import com.bank.fedwire.util.AccountNumberGenerator;
 import com.bank.fedwire.util.IbanGenerator;
+import com.bank.fedwire.util.RoutingNumberGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -44,12 +45,14 @@ public class CustomerServiceImpl implements CustomerService {
     private static final String DEFAULT_CURRENCY = "USD";
     private static final String DEFAULT_STATUS = "ACTIVE";
     private static final int MAX_ACCOUNT_NUMBER_ATTEMPTS = 20;
+    private static final int MAX_ROUTING_NUMBER_ATTEMPTS = 20;
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final AccountRepository accountRepository;
     private final AccountNumberGenerator accountNumberGenerator;
     private final IbanGenerator ibanGenerator;
+    private final RoutingNumberGenerator routingNumberGenerator;
     private final DashboardActivityRepository dashboardActivityRepository;
 
     @Override
@@ -273,6 +276,7 @@ public class CustomerServiceImpl implements CustomerService {
         Account account = Account.builder()
                 .user(user)
                 .accountNumber(generateUniqueAccountNumber())
+                .routingNumber(generateUniqueRoutingNumber())
                 .accountType(normalizeAccountType(request.getAccountType()))
                 .balance(request.getBalance())
                 .currency(DEFAULT_CURRENCY)
@@ -359,6 +363,16 @@ public class CustomerServiceImpl implements CustomerService {
         throw new DuplicateAccountNumberException("Unable to generate a unique account number.");
     }
 
+    private String generateUniqueRoutingNumber() {
+        for (int attempt = 0; attempt < MAX_ROUTING_NUMBER_ATTEMPTS; attempt++) {
+            String routingNumber = routingNumberGenerator.generate();
+            if (!accountRepository.existsByRoutingNumber(routingNumber)) {
+                return routingNumber;
+            }
+        }
+        throw new DuplicateResourceException("Unable to generate a unique routing number.");
+    }
+
     private boolean isAccountNumberConstraintViolation(DataIntegrityViolationException ex) {
         String message = ex.getMostSpecificCause() != null
                 ? ex.getMostSpecificCause().getMessage()
@@ -398,6 +412,7 @@ public class CustomerServiceImpl implements CustomerService {
                 .userId(account.getUser() != null ? account.getUser().getUserId() : null)
                 .accountNumber(account.getAccountNumber())
                 .iban(account.getIban())
+                .routingNumber(account.getRoutingNumber())
                 .balance(account.getBalance())
                 .accountType(account.getAccountType())
                 .currency(account.getCurrency())

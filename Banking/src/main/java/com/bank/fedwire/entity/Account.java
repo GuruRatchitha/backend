@@ -2,6 +2,8 @@ package com.bank.fedwire.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -30,7 +32,8 @@ import java.util.List;
         name = "account",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_account_account_number", columnNames = "account_number"),
-                @UniqueConstraint(name = "uk_account_iban", columnNames = "iban")
+                @UniqueConstraint(name = "uk_account_iban", columnNames = "iban"),
+                @UniqueConstraint(name = "uk_account_routing_number", columnNames = "routing_number")
         }
 )
 @Getter
@@ -54,7 +57,9 @@ public class Account {
     @Column(name = "iban", unique = true, length = 21)
     private String iban;
 
-    @Column(name = "routing_number")
+    @NotBlank(message = "Routing number is required.")
+    @Pattern(regexp = "\\d{9}", message = "Routing number must be exactly 9 digits.")
+    @Column(name = "routing_number", unique = true, nullable = false, length = 9)
     private String routingNumber;
 
     @Column(name = "account_type", nullable = false)

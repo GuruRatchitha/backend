@@ -1,11 +1,13 @@
 package com.bank.fedwire.service;
 
 import com.bank.fedwire.dto.AccountStatisticsResponse;
+import com.bank.fedwire.dto.DashboardSettlementTransactionResponse;
 import com.bank.fedwire.dto.DashboardSummaryResponse;
 import com.bank.fedwire.dto.PendingBeneficiaryResponse;
 import com.bank.fedwire.dto.PendingTransactionResponse;
 import com.bank.fedwire.dto.RecentActivityResponse;
 import com.bank.fedwire.dto.RecentCustomerResponse;
+import com.bank.fedwire.dto.SettlementTransactionResponse;
 import com.bank.fedwire.entity.Role;
 import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.AccountRepository;
@@ -15,6 +17,7 @@ import com.bank.fedwire.repository.TransactionRepository;
 import com.bank.fedwire.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +42,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final BeneficiaryRepository beneficiaryRepository;
     private final TransactionRepository transactionRepository;
     private final DashboardActivityRepository dashboardActivityRepository;
+    private final SettlementTransactionService settlementTransactionService;
 
     @Override
     @Transactional(readOnly = true)
@@ -118,6 +122,22 @@ public class DashboardServiceImpl implements DashboardService {
         return dashboardActivityRepository.findRecentActivities(latestFive());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<DashboardSettlementTransactionResponse> getRecentSettlementTransactions(Long employeeUserId) {
+        requireEmployee(employeeUserId);
+        return settlementTransactionService.getSettlementTransactions(
+                        null,
+                        null,
+                        null,
+                        null,
+                        latestFiveSettlementTransactions())
+                .getContent()
+                .stream()
+                .map(this::toDashboardSettlementTransactionResponse)
+                .toList();
+    }
+
     private void requireEmployee(Long employeeUserId) {
         if (employeeUserId == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "X-User-Id header is required.");
@@ -134,6 +154,23 @@ public class DashboardServiceImpl implements DashboardService {
 
     private PageRequest latestFive() {
         return PageRequest.of(0, DASHBOARD_LIMIT);
+    }
+
+    private PageRequest latestFiveSettlementTransactions() {
+        Sort sort = Sort.by(
+                Sort.Order.desc("createdAt"),
+                Sort.Order.desc("settlementTransactionId"));
+        return PageRequest.of(0, DASHBOARD_LIMIT, sort);
+    }
+
+    private DashboardSettlementTransactionResponse toDashboardSettlementTransactionResponse(
+            SettlementTransactionResponse transaction) {
+        return new DashboardSettlementTransactionResponse(
+                transaction.paymentId(),
+                transaction.accountNumber(),
+                transaction.amount(),
+                transaction.status(),
+                transaction.createdAt());
     }
 
     private BigDecimal nullToZero(BigDecimal value) {

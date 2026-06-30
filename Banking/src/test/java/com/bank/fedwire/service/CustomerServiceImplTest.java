@@ -13,6 +13,7 @@ import com.bank.fedwire.repository.RoleRepository;
 import com.bank.fedwire.repository.UserRepository;
 import com.bank.fedwire.util.AccountNumberGenerator;
 import com.bank.fedwire.util.IbanGenerator;
+import com.bank.fedwire.util.RoutingNumberGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,12 +41,15 @@ class CustomerServiceImplTest {
         AccountRepository accountRepository = mock(AccountRepository.class);
         DashboardActivityRepository dashboardActivityRepository = mock(DashboardActivityRepository.class);
         AccountNumberGenerator accountNumberGenerator = mock(AccountNumberGenerator.class);
+        RoutingNumberGenerator routingNumberGenerator = mock(RoutingNumberGenerator.class);
         IbanGenerator ibanGenerator = new IbanGenerator();
 
         when(roleRepository.findById(2L))
                 .thenReturn(Optional.of(Role.builder().roleId(2L).roleName("CUSTOMER").build()));
         when(accountNumberGenerator.generate()).thenReturn("21234567890");
+        when(routingNumberGenerator.generate()).thenReturn("123456789");
         when(accountRepository.existsByAccountNumber("21234567890")).thenReturn(false);
+        when(accountRepository.existsByRoutingNumber("123456789")).thenReturn(false);
         when(accountRepository.existsByIban("US2123456789000000077")).thenReturn(false);
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
@@ -65,6 +69,7 @@ class CustomerServiceImplTest {
                 accountRepository,
                 accountNumberGenerator,
                 ibanGenerator,
+                routingNumberGenerator,
                 dashboardActivityRepository);
 
         CustomerResponse response = service.createCustomer(CustomerRequest.builder()
@@ -89,6 +94,7 @@ class CustomerServiceImplTest {
         assertThat(response.getAccounts().get(0).getAccountType()).isEqualTo("SAVINGS");
         assertThat(response.getAccounts().get(0).getAccountNumber()).isEqualTo("21234567890");
         assertThat(response.getAccounts().get(0).getIban()).isEqualTo("US2123456789000000077");
+        assertThat(response.getAccounts().get(0).getRoutingNumber()).isEqualTo("123456789");
         assertThat(response.getAccounts().get(0).getCurrency()).isEqualTo("USD");
         assertThat(response.getAccounts().get(0).getStatus()).isEqualTo("ACTIVE");
         assertThat(response.getAccounts().get(0).getCreatedDate()).isNotNull();
@@ -101,12 +107,15 @@ class CustomerServiceImplTest {
         AccountRepository accountRepository = mock(AccountRepository.class);
         DashboardActivityRepository dashboardActivityRepository = mock(DashboardActivityRepository.class);
         AccountNumberGenerator accountNumberGenerator = mock(AccountNumberGenerator.class);
+        RoutingNumberGenerator routingNumberGenerator = mock(RoutingNumberGenerator.class);
         IbanGenerator ibanGenerator = new IbanGenerator();
 
         when(roleRepository.findById(2L))
                 .thenReturn(Optional.of(Role.builder().roleId(2L).roleName("CUSTOMER").build()));
         when(accountNumberGenerator.generate()).thenReturn("21234567890", "29876543210", "27654321098");
+        when(routingNumberGenerator.generate()).thenReturn("123456789", "234567891", "345678912");
         when(accountRepository.existsByAccountNumber(any())).thenReturn(false);
+        when(accountRepository.existsByRoutingNumber(any())).thenReturn(false);
         when(accountRepository.existsByIban(any())).thenReturn(false);
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
@@ -127,6 +136,7 @@ class CustomerServiceImplTest {
                 accountRepository,
                 accountNumberGenerator,
                 ibanGenerator,
+                routingNumberGenerator,
                 dashboardActivityRepository);
 
         CustomerResponse response = service.createCustomer(CustomerRequest.builder()
@@ -163,6 +173,9 @@ class CustomerServiceImplTest {
         assertThat(response.getAccounts())
                 .extracting("accountNumber")
                 .containsExactly("21234567890", "29876543210", "27654321098");
+        assertThat(response.getAccounts())
+                .extracting("routingNumber")
+                .containsExactly("123456789", "234567891", "345678912");
         assertThat(response.getAccounts()).allSatisfy(account -> {
             assertThat(account.getAccountNumber()).startsWith("2").hasSize(11);
             assertThat(account.getIban()).startsWith("US");
@@ -182,6 +195,7 @@ class CustomerServiceImplTest {
         AccountRepository accountRepository = mock(AccountRepository.class);
         DashboardActivityRepository dashboardActivityRepository = mock(DashboardActivityRepository.class);
         AccountNumberGenerator accountNumberGenerator = mock(AccountNumberGenerator.class);
+        RoutingNumberGenerator routingNumberGenerator = mock(RoutingNumberGenerator.class);
         IbanGenerator ibanGenerator = new IbanGenerator();
 
         User user = User.builder()
@@ -204,6 +218,7 @@ class CustomerServiceImplTest {
                 .user(user)
                 .accountNumber("23456789012")
                 .iban("US23456789012000000012")
+                .routingNumber("456789123")
                 .balance(new BigDecimal("5000.00"))
                 .accountType("CURRENT")
                 .currency("USD")
@@ -217,7 +232,9 @@ class CustomerServiceImplTest {
         when(userRepository.existsByAadharNumberAndUserIdNot("589678963256", 7L)).thenReturn(false);
         when(userRepository.existsByPanCardNumberIgnoreCaseAndUserIdNot("HYTRF4567F", 7L)).thenReturn(false);
         when(accountNumberGenerator.generate()).thenReturn("29876543210");
+        when(routingNumberGenerator.generate()).thenReturn("567891234");
         when(accountRepository.existsByAccountNumber("29876543210")).thenReturn(false);
+        when(accountRepository.existsByRoutingNumber("567891234")).thenReturn(false);
         when(accountRepository.existsByIban("US2987654321000000088")).thenReturn(false);
         when(accountRepository.saveAndFlush(any(Account.class))).thenAnswer(invocation -> {
             Account account = invocation.getArgument(0);
@@ -233,6 +250,7 @@ class CustomerServiceImplTest {
                 accountRepository,
                 accountNumberGenerator,
                 ibanGenerator,
+                routingNumberGenerator,
                 dashboardActivityRepository);
 
         CustomerResponse response = service.updateCustomer(7L, CustomerUpdateRequest.builder()
@@ -276,6 +294,7 @@ class CustomerServiceImplTest {
         assertThat(updatedExistingAccount.getStatus()).isEqualTo("INACTIVE");
         assertThat(updatedExistingAccount.getAccountNumber()).isEqualTo("23456789012");
         assertThat(updatedExistingAccount.getIban()).isEqualTo("US23456789012000000012");
+        assertThat(updatedExistingAccount.getRoutingNumber()).isEqualTo("456789123");
 
         Account newAccount = user.getAccounts().stream()
                 .filter(account -> account.getAccountId().equals(88L))
@@ -286,6 +305,7 @@ class CustomerServiceImplTest {
         assertThat(newAccount.getAccountType()).isEqualTo("CURRENT");
         assertThat(newAccount.getAccountNumber()).isEqualTo("29876543210");
         assertThat(newAccount.getIban()).isEqualTo("US2987654321000000088");
+        assertThat(newAccount.getRoutingNumber()).isEqualTo("567891234");
         assertThat(newAccount.getCurrency()).isEqualTo("USD");
         assertThat(newAccount.getStatus()).isEqualTo("ACTIVE");
         assertThat(newAccount.getCreatedDate()).isNotNull();
