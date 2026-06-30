@@ -27,6 +27,7 @@ public class CustomerAccountRequest {
     )
     private String accountType;
 
+    @JsonAlias({"initialBalance", "initial_balance"})
     @DecimalMin(value = "0.00", inclusive = true, message = "Balance must be zero or greater.")
     private BigDecimal balance;
 

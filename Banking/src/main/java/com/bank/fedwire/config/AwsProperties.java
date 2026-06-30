@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "aws")
 public class AwsProperties {
 
+    private boolean messagingEnabled;
     private String accessKey;
     private String secretKey;
     private String region;

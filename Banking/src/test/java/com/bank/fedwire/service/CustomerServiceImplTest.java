@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -91,6 +92,87 @@ class CustomerServiceImplTest {
         assertThat(response.getAccounts().get(0).getCurrency()).isEqualTo("USD");
         assertThat(response.getAccounts().get(0).getStatus()).isEqualTo("ACTIVE");
         assertThat(response.getAccounts().get(0).getCreatedDate()).isNotNull();
+    }
+
+    @Test
+    void createCustomerSavesEveryRequestedAccount() {
+        UserRepository userRepository = mock(UserRepository.class);
+        RoleRepository roleRepository = mock(RoleRepository.class);
+        AccountRepository accountRepository = mock(AccountRepository.class);
+        DashboardActivityRepository dashboardActivityRepository = mock(DashboardActivityRepository.class);
+        AccountNumberGenerator accountNumberGenerator = mock(AccountNumberGenerator.class);
+        IbanGenerator ibanGenerator = new IbanGenerator();
+
+        when(roleRepository.findById(2L))
+                .thenReturn(Optional.of(Role.builder().roleId(2L).roleName("CUSTOMER").build()));
+        when(accountNumberGenerator.generate()).thenReturn("21234567890", "29876543210", "27654321098");
+        when(accountRepository.existsByAccountNumber(any())).thenReturn(false);
+        when(accountRepository.existsByIban(any())).thenReturn(false);
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setUserId(42L);
+            return user;
+        });
+        long[] accountId = {76L};
+        when(accountRepository.saveAndFlush(any(Account.class))).thenAnswer(invocation -> {
+            Account account = invocation.getArgument(0);
+            account.setAccountId(++accountId[0]);
+            return account;
+        });
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CustomerServiceImpl service = new CustomerServiceImpl(
+                userRepository,
+                roleRepository,
+                accountRepository,
+                accountNumberGenerator,
+                ibanGenerator,
+                dashboardActivityRepository);
+
+        CustomerResponse response = service.createCustomer(CustomerRequest.builder()
+                .fullName("Ravi Kumar")
+                .email("ravi.kumar@example.com")
+                .password("Password@123")
+                .phoneNumber("9876543210")
+                .aadharNumber("123456789012")
+                .panCardNumber("ABCDE1234F")
+                .address("123 Main Street")
+                .townName("Chennai")
+                .accounts(List.of(
+                        CustomerAccountRequest.builder()
+                                .accountType("savings")
+                                .balance(new BigDecimal("500.00"))
+                                .build(),
+                        CustomerAccountRequest.builder()
+                                .accountType("current")
+                                .balance(new BigDecimal("1500.00"))
+                                .build(),
+                        CustomerAccountRequest.builder()
+                                .accountType("salary")
+                                .balance(new BigDecimal("2500.00"))
+                                .build()))
+                .build());
+
+        assertThat(response.getAccounts()).hasSize(3);
+        assertThat(response.getAccounts())
+                .extracting("accountType")
+                .containsExactly("SAVINGS", "CURRENT", "SALARY");
+        assertThat(response.getAccounts())
+                .extracting("balance")
+                .containsExactly(new BigDecimal("500.00"), new BigDecimal("1500.00"), new BigDecimal("2500.00"));
+        assertThat(response.getAccounts())
+                .extracting("accountNumber")
+                .containsExactly("21234567890", "29876543210", "27654321098");
+        assertThat(response.getAccounts()).allSatisfy(account -> {
+            assertThat(account.getAccountNumber()).startsWith("2").hasSize(11);
+            assertThat(account.getIban()).startsWith("US");
+            assertThat(account.getCurrency()).isEqualTo("USD");
+            assertThat(account.getStatus()).isEqualTo("ACTIVE");
+            assertThat(account.getUserId()).isEqualTo(42L);
+        });
+
+        verify(accountRepository, times(3)).saveAndFlush(any(Account.class));
+        verify(accountRepository, times(3)).save(any(Account.class));
     }
 
     @Test

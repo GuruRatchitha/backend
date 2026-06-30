@@ -1,10 +1,10 @@
 package com.bank.fedwire.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @Setter
@@ -53,7 +54,6 @@ public class CustomerRequest {
     private String townName;
 
     @JsonAlias("account_type")
-    @NotBlank(message = "Account type is required.")
     @Pattern(
             regexp = "(?i)^(savings|current|salary|salery)$",
             message = "Account type must be SAVINGS, CURRENT, or SALARY."
@@ -61,7 +61,9 @@ public class CustomerRequest {
     private String accountType;
 
     @JsonAlias("initial_balance")
-    @NotNull(message = "Initial balance is required.")
     @DecimalMin(value = "100.00", inclusive = true, message = "Initial balance must be at least 100.")
     private BigDecimal initialBalance;
+
+    @Valid
+    private List<CustomerAccountRequest> accounts;
 }

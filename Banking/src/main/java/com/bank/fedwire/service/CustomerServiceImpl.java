@@ -28,6 +28,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -53,9 +55,10 @@ public class CustomerServiceImpl implements CustomerService {
     @Override
     @Transactional
     public CustomerResponse createCustomer(CustomerRequest request) {
-        log.info("Create customer request received with accountType={} initialBalance={}",
-                request.getAccountType(), request.getInitialBalance());
+        List<CustomerAccountRequest> accountRequests = getCreateAccountRequests(request);
+        log.info("Create customer request received with accountCount={}", accountRequests.size());
         validateUniqueCustomerFields(request, null);
+        validateCreateAccountRequests(accountRequests);
 
         Role customerRole = roleRepository.findById(CUSTOMER_ROLE_ID)
                 .orElseThrow(() -> new ResourceNotFoundException("Customer role not found with id: " + CUSTOMER_ROLE_ID));
@@ -77,10 +80,12 @@ public class CustomerServiceImpl implements CustomerService {
         User savedUser = userRepository.saveAndFlush(user);
         log.info("Created user for customer with generated userId={}", savedUser.getUserId());
 
-        Account savedAccount = createAccountForCustomer(savedUser, request);
-        savedUser.getAccounts().add(savedAccount);
         logActivity("Customer Created", "Customer " + savedUser.getUserName() + " was created.");
-        logActivity("Account Created", "Account " + savedAccount.getAccountNumber() + " was created for customer " + savedUser.getUserName() + ".");
+        for (CustomerAccountRequest accountRequest : accountRequests) {
+            Account savedAccount = createAccountForCustomer(savedUser, accountRequest);
+            savedUser.getAccounts().add(savedAccount);
+            logActivity("Account Created", "Account " + savedAccount.getAccountNumber() + " was created for customer " + savedUser.getUserName() + ".");
+        }
 
         return toCustomerResponse(savedUser);
     }
@@ -257,12 +262,19 @@ public class CustomerServiceImpl implements CustomerService {
         }
     }
 
-    private Account createAccountForCustomer(User user, CustomerRequest request) {
+    private Account createAccountForCustomer(User user, CustomerAccountRequest request) {
+        if (request.getBalance() == null) {
+            throw new IllegalArgumentException("Balance is required for a new account.");
+        }
+        if (trim(request.getAccountType()) == null) {
+            throw new IllegalArgumentException("Account type is required for a new account.");
+        }
+
         Account account = Account.builder()
                 .user(user)
                 .accountNumber(generateUniqueAccountNumber())
                 .accountType(normalizeAccountType(request.getAccountType()))
-                .balance(request.getInitialBalance())
+                .balance(request.getBalance())
                 .currency(DEFAULT_CURRENCY)
                 .status(DEFAULT_STATUS)
                 .createdDate(LocalDateTime.now())
@@ -305,41 +317,36 @@ public class CustomerServiceImpl implements CustomerService {
         return accountWithIban;
     }
 
-    private Account createAccountForCustomer(User user, CustomerAccountRequest request) {
-        if (request.getBalance() == null) {
-            throw new IllegalArgumentException("Balance is required for a new account.");
-        }
-        if (trim(request.getAccountType()) == null) {
-            throw new IllegalArgumentException("Account type is required for a new account.");
+    private List<CustomerAccountRequest> getCreateAccountRequests(CustomerRequest request) {
+        if (request.getAccounts() != null) {
+            return request.getAccounts();
         }
 
-        Account account = Account.builder()
-                .user(user)
-                .accountNumber(generateUniqueAccountNumber())
-                .accountType(normalizeAccountType(request.getAccountType()))
-                .balance(request.getBalance())
-                .currency(DEFAULT_CURRENCY)
-                .status(DEFAULT_STATUS)
-                .createdDate(LocalDateTime.now())
-                .build();
+        List<CustomerAccountRequest> accountRequests = new ArrayList<>();
+        accountRequests.add(CustomerAccountRequest.builder()
+                .accountType(request.getAccountType())
+                .balance(request.getInitialBalance())
+                .build());
+        return accountRequests;
+    }
 
-        Account savedAccount;
-        try {
-            savedAccount = accountRepository.saveAndFlush(account);
-        } catch (DataIntegrityViolationException ex) {
-            if (isAccountNumberConstraintViolation(ex)) {
-                throw new DuplicateAccountNumberException("Generated account number already exists.");
+    private void validateCreateAccountRequests(List<CustomerAccountRequest> accountRequests) {
+        if (accountRequests == null || accountRequests.isEmpty()) {
+            throw new IllegalArgumentException("At least one account is required.");
+        }
+
+        for (CustomerAccountRequest accountRequest : accountRequests) {
+            if (accountRequest == null) {
+                throw new IllegalArgumentException("Account details are required.");
             }
-            throw ex;
+            if (trim(accountRequest.getAccountType()) == null) {
+                throw new IllegalArgumentException("Account type is required for each account.");
+            }
+            BigDecimal initialBalance = accountRequest.getBalance();
+            if (initialBalance == null || initialBalance.compareTo(new BigDecimal("100.00")) < 0) {
+                throw new IllegalArgumentException("Initial balance must be at least 100 for each account.");
+            }
         }
-
-        String iban = ibanGenerator.generate(savedAccount.getAccountNumber(), savedAccount.getAccountId());
-        if (accountRepository.existsByIban(iban)) {
-            throw new DuplicateResourceException("Generated IBAN already exists.");
-        }
-
-        savedAccount.setIban(iban);
-        return accountRepository.save(savedAccount);
     }
 
     private String generateUniqueAccountNumber() {
