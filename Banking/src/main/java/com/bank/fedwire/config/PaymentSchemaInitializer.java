@@ -3,11 +3,14 @@ package com.bank.fedwire.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class PaymentSchemaInitializer implements ApplicationRunner {
 
     private final JdbcTemplate jdbcTemplate;
@@ -15,6 +18,7 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         ensureUserColumns();
+        ensureAadharColumnLengths();
         ensureAccountColumns();
         ensureBeneficiaryIdColumn();
         ensureTransactionColumns();
@@ -28,6 +32,13 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         addColumnIfMissing("users", "town_name", "ALTER TABLE users ADD COLUMN town_name VARCHAR(255) NULL");
     }
 
+    private void ensureAadharColumnLengths() {
+        expandColumnIfShorterThan("users", "aadhar_number", 12,
+                "ALTER TABLE users MODIFY COLUMN aadhar_number VARCHAR(12) NOT NULL");
+        expandColumnIfShorterThan("customers", "aadhar_number", 12,
+                "ALTER TABLE customers MODIFY COLUMN aadhar_number VARCHAR(12) NOT NULL");
+    }
+
     private void ensureAccountColumns() {
         dropForeignKeysForColumn("account", "customer_id");
         dropColumnIfExists("account", "customer_id", "ALTER TABLE account DROP COLUMN customer_id");
@@ -38,6 +49,9 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
     }
 
     private void ensureBeneficiaryIdColumn() {
+        if (tableExists("beneficiary") && !columnExists("beneficiary", "beneficiary_id") && columnExists("beneficiary", "id")) {
+            jdbcTemplate.execute("ALTER TABLE beneficiary CHANGE COLUMN id beneficiary_id BIGINT NOT NULL AUTO_INCREMENT");
+        }
         addColumnIfMissing("beneficiary", "beneficiary_id",
                 "ALTER TABLE beneficiary ADD COLUMN beneficiary_id BIGINT NOT NULL AUTO_INCREMENT UNIQUE FIRST");
         addColumnIfMissing("beneficiary", "bank_name",
@@ -268,6 +282,23 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
                   AND COLUMN_NAME = ?
                 """, Integer.class, tableName, columnName);
         return count != null && count > 0;
+    }
+
+    private void expandColumnIfShorterThan(String tableName, String columnName, int minimumLength, String ddl) {
+        if (!columnExists(tableName, columnName)) {
+            return;
+        }
+
+        Integer length = jdbcTemplate.queryForObject("""
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME = ?
+                """, Integer.class, tableName, columnName);
+        if (length != null && length < minimumLength) {
+            jdbcTemplate.execute(ddl);
+        }
     }
 
     private void addUniqueIndexIfMissing(String tableName, String indexName, String ddl) {

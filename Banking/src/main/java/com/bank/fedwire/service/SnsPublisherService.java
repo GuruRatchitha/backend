@@ -5,7 +5,6 @@ import com.bank.fedwire.entity.PACS008;
 import com.bank.fedwire.repository.PACS008Repository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +22,6 @@ import java.util.concurrent.ThreadLocalRandom;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(prefix = "aws", name = "messaging-enabled", havingValue = "true")
 public class SnsPublisherService {
 
     private static final String MESSAGE_TYPE = "Notification";
@@ -31,10 +29,27 @@ public class SnsPublisherService {
 
     private final PACS008Repository pacs008Repository;
     private final AwsProperties awsProperties;
-    private final SnsClient snsClient;
+    private final Optional<SnsClient> snsClient;
 
     @Transactional
     public void publishIfNeeded(Long transactionId) {
+        if (!awsProperties.isMessagingEnabled()) {
+            log.info("AWS messaging is disabled; skipping SNS publish for transactionId={}", transactionId);
+            return;
+        }
+
+        if (snsClient.isEmpty()) {
+            log.warn("AWS messaging is enabled but no SNS client is available; skipping SNS publish for transactionId={}",
+                    transactionId);
+            return;
+        }
+
+        if (awsProperties.getTopicArn() == null || awsProperties.getTopicArn().isBlank()) {
+            log.warn("AWS messaging is enabled but aws.topic-arn is not configured; skipping SNS publish for transactionId={}",
+                    transactionId);
+            return;
+        }
+
         PACS008 pacs008 = pacs008Repository.findByTransactionIdForUpdate(transactionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "PACS008 record not found for transactionId " + transactionId));
@@ -60,7 +75,7 @@ public class SnsPublisherService {
                 builder.messageDeduplicationId(UUID.randomUUID().toString().replace("-", ""));
             }
 
-            PublishResponse response = snsClient.publish(builder.build());
+            PublishResponse response = snsClient.get().publish(builder.build());
 
             pacs008.setSqsPublishedAt(LocalDateTime.now(ZoneOffset.UTC));
             pacs008.setSqsMessageId(response.messageId());

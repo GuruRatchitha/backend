@@ -18,8 +18,8 @@ spring:
 # Placeholder AWS settings for local development.
 # Replace these values with the real AWS region, credentials, topic ARN, and queue URL in non-local environments.
 aws:
-  access-key: ${AWS_ACCESS_KEY_ID:local-access-key}
-  secret-key: ${AWS_SECRET_ACCESS_KEY:local-secret-key}
-  region: ${AWS_REGION:us-east-2}
-  topic-arn: ${AWS_SNS_TOPIC_ARN:}
-  pacs002-queue-url: ${AWS_PACS002_QUEUE_URL:}
+  access-key:
+  secret-key:
+  region: us-east-2
+  topic-arn: arn:aws:sns:us-east-2:084845891305:fan_out_010099_to_fedwire.fifo
+  pacs002-queue-url: https://sqs.us-east-2.amazonaws.com/084845891305/010099_out_fedwire.fifo

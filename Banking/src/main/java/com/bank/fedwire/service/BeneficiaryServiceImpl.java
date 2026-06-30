@@ -10,6 +10,7 @@ import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.DashboardActivityRepository;
 import com.bank.fedwire.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BeneficiaryServiceImpl implements BeneficiaryService {
 
     private static final String STATUS_PENDING = "PENDING";
@@ -173,10 +175,12 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
         }
 
         Beneficiary beneficiary = beneficiaryRepository.findById(beneficiaryId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Beneficiary not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Beneficiary not found for beneficiaryId " + beneficiaryId));
 
         if (!STATUS_PENDING.equalsIgnoreCase(beneficiary.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only pending beneficiaries can be updated");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Only pending beneficiaries can be updated. Current status is " + beneficiary.getStatus());
         }
 
         return beneficiary;
@@ -258,10 +262,14 @@ public class BeneficiaryServiceImpl implements BeneficiaryService {
     }
 
     private void logActivity(String activity, String description) {
-        dashboardActivityRepository.save(DashboardActivity.builder()
-                .activity(activity)
-                .description(description)
-                .employeeName("System")
-                .build());
+        try {
+            dashboardActivityRepository.save(DashboardActivity.builder()
+                    .activity(activity)
+                    .description(description)
+                    .employeeName("System")
+                    .build());
+        } catch (RuntimeException ex) {
+            log.warn("Beneficiary status was updated, but dashboard activity logging failed: {}", ex.getMessage());
+        }
     }
 }

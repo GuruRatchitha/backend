@@ -7,9 +7,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -46,16 +46,38 @@ public class EmployeeBeneficiaryController {
         return ResponseEntity.ok(beneficiaryService.getBeneficiariesByStatus(status));
     }
 
-    @PutMapping("/{beneficiaryId}/approve")
+    @RequestMapping(path = "/{beneficiaryId}/approve", method = {
+            RequestMethod.PUT,
+            RequestMethod.POST,
+            RequestMethod.PATCH
+    })
     public ResponseEntity<BeneficiaryResponse> approveBeneficiary(@PathVariable Long beneficiaryId) {
         return ResponseEntity.ok(beneficiaryService.approveBeneficiary(beneficiaryId));
     }
 
-    @PutMapping("/{beneficiaryId}/reject")
+    @RequestMapping(path = "/{beneficiaryId}/reject", method = {
+            RequestMethod.PUT,
+            RequestMethod.POST,
+            RequestMethod.PATCH
+    })
     public ResponseEntity<BeneficiaryResponse> rejectBeneficiary(
             @PathVariable Long beneficiaryId,
-            @RequestBody(required = false) Map<String, String> request) {
-        String rejectionReason = request != null ? request.get("rejectionReason") : null;
+            @RequestBody(required = false) Object request) {
+        String rejectionReason = extractRejectionReason(request);
         return ResponseEntity.ok(beneficiaryService.rejectBeneficiary(beneficiaryId, rejectionReason));
+    }
+
+    private String extractRejectionReason(Object request) {
+        if (request instanceof Map<?, ?> values) {
+            Object value = values.get("rejectionReason");
+            if (value == null) {
+                value = values.get("reason");
+            }
+            return value != null ? value.toString() : null;
+        }
+        if (request instanceof String value) {
+            return value;
+        }
+        return null;
     }
 }

@@ -8,9 +8,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
@@ -68,6 +68,29 @@ class EmployeeBeneficiaryControllerTest {
         assertEquals("Invalid account", body.get(0).getRejectionReason());
 
         verify(beneficiaryService).getBeneficiariesByStatus("rejected");
+    }
+
+    @Test
+    void approveBeneficiaryReturnsUpdatedBeneficiary() {
+        BeneficiaryResponse approved = sampleBeneficiaries("APPROVED").get(0);
+        when(beneficiaryService.approveBeneficiary(1L)).thenReturn(approved);
+
+        BeneficiaryResponse body = controller.approveBeneficiary(1L).getBody();
+
+        assertEquals("APPROVED", body.getStatus());
+        verify(beneficiaryService).approveBeneficiary(1L);
+    }
+
+    @Test
+    void rejectBeneficiaryAcceptsRejectionReasonBody() {
+        BeneficiaryResponse rejected = sampleBeneficiaries("REJECTED").get(0);
+        when(beneficiaryService.rejectBeneficiary(1L, "Invalid account")).thenReturn(rejected);
+
+        BeneficiaryResponse body = controller.rejectBeneficiary(1L, Map.of("rejectionReason", "Invalid account")).getBody();
+
+        assertEquals("REJECTED", body.getStatus());
+        assertEquals("Invalid account", body.getRejectionReason());
+        verify(beneficiaryService).rejectBeneficiary(1L, "Invalid account");
     }
 
     private List<BeneficiaryResponse> sampleBeneficiaries(String status) {

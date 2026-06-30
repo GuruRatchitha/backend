@@ -5,6 +5,8 @@ import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.RoleRepository;
 import com.bank.fedwire.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -14,6 +16,7 @@ import java.time.LocalDateTime;
 
 @Component
 @RequiredArgsConstructor
+@Order(Ordered.LOWEST_PRECEDENCE)
 public class DemoDataInitializer implements ApplicationRunner {
 
     private final RoleRepository roleRepository;
