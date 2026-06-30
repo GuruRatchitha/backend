@@ -30,6 +30,7 @@ public class PACS002 {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "pacs002_id")
     private Long pacs002Id;
 
     @Column(name = "original_message_id")

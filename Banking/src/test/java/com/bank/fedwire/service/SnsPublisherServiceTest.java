@@ -40,6 +40,7 @@ class SnsPublisherServiceTest {
                 .build();
 
         AwsProperties awsProperties = new AwsProperties();
+        awsProperties.setMessagingEnabled(true);
         awsProperties.setTopicArn(topicArn);
 
         when(pacs008Repository.findByTransactionIdForUpdate(100L)).thenReturn(Optional.of(pacs008));

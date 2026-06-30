@@ -3,9 +3,9 @@ package com.bank.fedwire.service;
 import com.bank.fedwire.config.AwsProperties;
 import com.bank.fedwire.entity.PACS008;
 import com.bank.fedwire.repository.PACS008Repository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,11 +19,10 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Supplier;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(prefix = "aws", name = "messaging-enabled", havingValue = "true")
 public class SnsPublisherService {
 
     private static final String MESSAGE_TYPE = "Notification";
@@ -31,10 +30,42 @@ public class SnsPublisherService {
 
     private final PACS008Repository pacs008Repository;
     private final AwsProperties awsProperties;
-    private final SnsClient snsClient;
+    private final Supplier<SnsClient> snsClientSupplier;
+
+    @Autowired
+    public SnsPublisherService(PACS008Repository pacs008Repository,
+                               AwsProperties awsProperties,
+                               ObjectProvider<SnsClient> snsClientProvider) {
+        this(pacs008Repository, awsProperties, snsClientProvider::getIfAvailable);
+    }
+
+    SnsPublisherService(PACS008Repository pacs008Repository,
+                        AwsProperties awsProperties,
+                        SnsClient snsClient) {
+        this(pacs008Repository, awsProperties, () -> snsClient);
+    }
+
+    private SnsPublisherService(PACS008Repository pacs008Repository,
+                                AwsProperties awsProperties,
+                                Supplier<SnsClient> snsClientSupplier) {
+        this.pacs008Repository = pacs008Repository;
+        this.awsProperties = awsProperties;
+        this.snsClientSupplier = snsClientSupplier;
+    }
 
     @Transactional
     public void publishIfNeeded(Long transactionId) {
+        if (!awsProperties.isMessagingEnabled()) {
+            log.info("Skipping SNS publish for transactionId={} because aws.messaging-enabled is false", transactionId);
+            return;
+        }
+
+        SnsClient snsClient = snsClientSupplier.get();
+        if (snsClient == null) {
+            log.warn("Skipping SNS publish for transactionId={} because no SnsClient bean is available", transactionId);
+            return;
+        }
+
         PACS008 pacs008 = pacs008Repository.findByTransactionIdForUpdate(transactionId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "PACS008 record not found for transactionId " + transactionId));
