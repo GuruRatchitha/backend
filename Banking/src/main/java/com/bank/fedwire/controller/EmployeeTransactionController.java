@@ -69,6 +69,11 @@ public class EmployeeTransactionController {
         return ResponseEntity.ok(transactionService.approveTransaction(transactionId));
     }
 
+    @RequestMapping(value = "/{transactionId}/revert", method = RequestMethod.POST)
+    public ResponseEntity<TransactionDetailResponse> revertTransaction(@PathVariable Long transactionId) {
+        return ResponseEntity.ok(transactionService.revertTransaction(transactionId));
+    }
+
     @RequestMapping(value = "/{transactionId}/reject", method = {RequestMethod.POST, RequestMethod.PUT})
     public ResponseEntity<TransactionDetailResponse> rejectTransaction(@PathVariable Long transactionId) {
         return ResponseEntity.ok(transactionService.rejectTransaction(transactionId));

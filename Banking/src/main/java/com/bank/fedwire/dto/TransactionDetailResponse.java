@@ -20,6 +20,22 @@ public class TransactionDetailResponse {
 
     private String status;
 
+    private String transactionStatus;
+
+    private String payaptStatus;
+
+    private String rejectionReason;
+
+    private Boolean canRevert;
+
+    private Boolean reverted;
+
+    private Boolean settlementCompleted;
+
+    private Boolean processCompleted;
+
+    private String currentPipelineStep;
+
     private SenderDetails senderDetails;
 
     private ReceiverDetails receiverDetails;

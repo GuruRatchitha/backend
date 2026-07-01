@@ -32,4 +32,6 @@ public interface SettlementTransactionService {
     void processApproval(Transaction transaction, PACS008 pacs008);
 
     void processPacs002(Transaction transaction, PACS002 pacs002);
+
+    void revertToSender(Long transactionId);
 }

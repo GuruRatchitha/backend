@@ -2,8 +2,11 @@ package com.bank.fedwire.entity;
 
 public enum TransactionStatus {
     APPROVED,
+    PROCESSING,
     ON_HOLD,
     REJECTED,
+    RETURN,
+    REVERTED,
     COMPLETED,
     FAILED,
     PENDING,

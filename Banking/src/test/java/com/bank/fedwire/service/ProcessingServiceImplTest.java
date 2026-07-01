@@ -57,27 +57,29 @@ class ProcessingServiceImplTest {
     }
 
     @Test
-    void getProcessingPipelineKeepsDecisionPendingForAdmi002() {
+    void getProcessingPipelineShowsReasonAndStopsForAdmi002() {
         LocalDateTime receivedAt = LocalDateTime.of(2026, 6, 30, 11, 22, 20);
 
         TestPipelineProjection projection = new TestPipelineProjection();
         projection.transactionId = 48L;
-        projection.transactionStatus = "REJECTED";
+        projection.transactionStatus = "FAILED";
         projection.pacs008Id = 1L;
         projection.pacs008XmlPayload = "<xml/>";
         projection.pacs008CreatedDate = receivedAt.minusSeconds(5);
         projection.pacs008SentAt = receivedAt.minusSeconds(2);
         projection.admi002Id = 3L;
+        projection.admi002ErrorDescription = "Invalid account format";
         projection.admi002ReceivedTimestamp = receivedAt;
         when(repository.findPipelineByTransactionId(48L)).thenReturn(Optional.of(projection));
 
         ProcessingPipelineDTO response = service.getProcessingPipeline(48L);
 
-        assertEquals("REJECTED", response.status());
+        assertEquals("FAILED", response.status());
         assertStep(response.steps().get(2), "RESPONSE_RECEIVED", ProcessingStatus.COMPLETED, "ADMI002", null);
-        assertStep(response.steps().get(3), "TRANSACTION_DECISION", ProcessingStatus.PENDING, "ADMI002", "PENDING");
-        assertStep(response.steps().get(4), "SETTLEMENT", ProcessingStatus.NOT_APPLICABLE, "ADMI002", "PENDING");
-        assertStep(response.steps().get(5), "PROCESS_COMPLETED", ProcessingStatus.NOT_APPLICABLE, "ADMI002", "PENDING");
+        assertStep(response.steps().get(3), "TRANSACTION_DECISION", ProcessingStatus.FAILED, "ADMI002", "REJECTED");
+        assertEquals("Invalid account format", response.steps().get(3).message());
+        assertStep(response.steps().get(4), "SETTLEMENT", ProcessingStatus.NOT_APPLICABLE, "ADMI002", "REJECTED");
+        assertStep(response.steps().get(5), "PROCESS_COMPLETED", ProcessingStatus.NOT_APPLICABLE, "ADMI002", "REJECTED");
     }
 
     @Test
@@ -119,8 +121,13 @@ class ProcessingServiceImplTest {
         private String pacs008MessageId;
         private Long pacs002Id;
         private String pacs002TransactionStatus;
+        private String pacs002ReasonCode;
         private LocalDateTime pacs002ReceivedTimestamp;
         private Long admi002Id;
+        private String admi002RejectReasonDescription;
+        private String admi002ErrorDescription;
+        private String admi002RejectReasonCode;
+        private String admi002ErrorCode;
         private LocalDateTime admi002ReceivedTimestamp;
         private LocalDateTime beneficiarySettlementAt;
         private LocalDateTime returnSettlementAt;
@@ -176,6 +183,11 @@ class ProcessingServiceImplTest {
         }
 
         @Override
+        public String getPacs002ReasonCode() {
+            return pacs002ReasonCode;
+        }
+
+        @Override
         public LocalDateTime getPacs002ReceivedTimestamp() {
             return pacs002ReceivedTimestamp;
         }
@@ -183,6 +195,26 @@ class ProcessingServiceImplTest {
         @Override
         public Long getAdmi002Id() {
             return admi002Id;
+        }
+
+        @Override
+        public String getAdmi002RejectReasonDescription() {
+            return admi002RejectReasonDescription;
+        }
+
+        @Override
+        public String getAdmi002ErrorDescription() {
+            return admi002ErrorDescription;
+        }
+
+        @Override
+        public String getAdmi002RejectReasonCode() {
+            return admi002RejectReasonCode;
+        }
+
+        @Override
+        public String getAdmi002ErrorCode() {
+            return admi002ErrorCode;
         }
 
         @Override

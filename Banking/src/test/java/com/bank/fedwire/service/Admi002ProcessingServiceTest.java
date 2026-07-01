@@ -99,7 +99,7 @@ class Admi002ProcessingServiceTest {
         assertEquals("Account closed", saved.getErrorDescription());
         assertEquals("FATAL", saved.getSeverity());
         assertEquals(55L, saved.getTransactionId());
-        assertEquals("ADMI002_RECEIVED", transaction.getTransactionStatus());
+        assertEquals("FAILED", transaction.getTransactionStatus());
         verify(transactionRepository).saveAndFlush(transaction);
     }
 

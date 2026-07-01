@@ -4,7 +4,6 @@ import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.entity.TransactionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -79,25 +78,38 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             """)
     List<com.bank.fedwire.dto.PendingTransactionResponse> findPendingTransactions(
             @Param("status") String status,
-            Pageable pageable);
+            org.springframework.data.domain.Pageable pageable);
 
     @EntityGraph(attributePaths = {"account", "account.user"})
-    Page<Transaction> findByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId, Pageable pageable);
+    Page<Transaction> findByAccountUserUserIdOrderByTransactionDateTimeDesc(Long userId, org.springframework.data.domain.Pageable pageable);
 
-    @Query("""
-            select new com.bank.fedwire.dto.EmployeeTransactionQueueResponse(
-                    t.transactionId,
-                    t.transferId,
-                    u.userName,
-                    t.beneficiaryName,
-                    t.amount,
-                    t.transactionStatus,
-                    t.transactionDateTime
-            )
-            from BankTransaction t
-            left join t.account a
-            left join a.user u
-            order by t.transactionDateTime desc
-            """)
-    List<com.bank.fedwire.dto.EmployeeTransactionQueueResponse> findEmployeeTransactionQueue();
+    @Query(value = """
+            select
+                t.transaction_id as transactionId,
+                t.transfer_id as transactionReference,
+                u.user_name as senderName,
+                t.beneficiary_name as beneficiaryName,
+                t.amount as amount,
+                t.transaction_status as status,
+                t.transaction_date_time as paymentDate
+            from (
+                select
+                    transaction_id,
+                    transfer_id,
+                    account_number,
+                    beneficiary_name,
+                    amount,
+                    transaction_status,
+                    transaction_date_time
+                from transactions
+                order by transaction_id desc
+                limit :limit
+            ) t
+            left join account a
+                on a.account_number = t.account_number
+            left join users u
+                on u.user_id = a.user_id
+            order by t.transaction_id desc
+            """, nativeQuery = true)
+    List<EmployeeTransactionQueueProjection> findEmployeeTransactionQueue(@Param("limit") int limit);
 }

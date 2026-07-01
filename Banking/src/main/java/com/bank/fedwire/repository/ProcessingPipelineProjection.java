@@ -24,9 +24,19 @@ public interface ProcessingPipelineProjection {
 
     String getPacs002TransactionStatus();
 
+    String getPacs002ReasonCode();
+
     LocalDateTime getPacs002ReceivedTimestamp();
 
     Long getAdmi002Id();
+
+    String getAdmi002RejectReasonDescription();
+
+    String getAdmi002ErrorDescription();
+
+    String getAdmi002RejectReasonCode();
+
+    String getAdmi002ErrorCode();
 
     LocalDateTime getAdmi002ReceivedTimestamp();
 

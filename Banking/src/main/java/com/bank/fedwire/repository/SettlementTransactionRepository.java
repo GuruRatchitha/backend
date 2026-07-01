@@ -22,4 +22,7 @@ public interface SettlementTransactionRepository extends JpaRepository<Settlemen
 
     Optional<SettlementTransaction> findTopByPaymentIdAndTransactionTypeOrderByCreatedAtDesc(
             Long paymentId, SettlementTransactionType transactionType);
+
+    boolean existsByPaymentIdAndTransactionTypeAndStatus(
+            Long paymentId, SettlementTransactionType transactionType, SettlementTransactionStatus status);
 }

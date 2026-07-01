@@ -45,9 +45,11 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
 
     private static final String SETTLEMENT_ACCOUNT_TYPE = "SETTLEMENT";
     private static final String STATUS_APPROVED = TransactionStatus.APPROVED.name();
+    private static final String STATUS_PROCESSING = TransactionStatus.PROCESSING.name();
     private static final String STATUS_WAITING = TransactionStatus.WAITING_FOR_PACS002.name();
     private static final String STATUS_COMPLETED = TransactionStatus.COMPLETED.name();
-    private static final String STATUS_REJECTED = TransactionStatus.REJECTED.name();
+    private static final String STATUS_RETURN = TransactionStatus.RETURN.name();
+    private static final String STATUS_REVERTED = TransactionStatus.REVERTED.name();
 
     private final AccountRepository accountRepository;
     private final BeneficiaryRepository beneficiaryRepository;
@@ -142,9 +144,28 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         Account settlementAccount = lockSettlementAccount();
         BigDecimal amount = requireAmount(lockedTransaction.getAmount());
 
-        // TEMPORARY FOR PAYAPT ADM.002 TESTING
-        // Skip local balance mutation so oversized positive test amounts can still reach PayAPT.
-        // END TEMPORARY
+        pacs008XmlGeneratorService.generateXml(lockedTransaction.getTransactionId());
+        snsPublisherService.publishIfNeeded(lockedTransaction.getTransactionId());
+
+        boolean alreadyDebited = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                lockedTransaction.getTransactionId(),
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT,
+                SettlementTransactionStatus.SUCCESS);
+        if (alreadyDebited) {
+            lockedTransaction.setTransactionStatus(STATUS_PROCESSING);
+            lockedTransaction.setPendingPaymentKey(null);
+            transactionRepository.saveAndFlush(lockedTransaction);
+            messageHeader.setMessageStatus(STATUS_PROCESSING);
+            messageHeaderRepository.saveAndFlush(messageHeader);
+            log.info("Approval settlement already exists for paymentId={}; leaving balances unchanged",
+                    lockedTransaction.getTransactionId());
+            return;
+        }
+
+        debit(senderAccount, amount);
+        credit(settlementAccount, amount);
+        accountRepository.save(senderAccount);
+        accountRepository.save(settlementAccount);
 
         SettlementTransaction settlementDebit = settlementTransactionRepository.save(
                 SettlementTransaction.builder()
@@ -158,11 +179,13 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                         .pacs008MessageId(pacs008.getMessageId())
                         .build());
 
-        pacs008XmlGeneratorService.generateXml(lockedTransaction.getTransactionId());
-        snsPublisherService.publishIfNeeded(lockedTransaction.getTransactionId());
-
         settlementDebit.setPacs008MessageId(pacs008.getMessageId());
         settlementTransactionRepository.save(settlementDebit);
+        lockedTransaction.setTransactionStatus(STATUS_PROCESSING);
+        lockedTransaction.setPendingPaymentKey(null);
+        transactionRepository.saveAndFlush(lockedTransaction);
+        messageHeader.setMessageStatus(STATUS_PROCESSING);
+        messageHeaderRepository.saveAndFlush(messageHeader);
 
         log.info("Approved paymentId={} and moved funds to settlement account {}", lockedTransaction.getTransactionId(),
                 settlementAccount.getAccountNumber());
@@ -182,8 +205,13 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Transaction not found for transactionId " + transaction.getTransactionId()));
+        String status = normalizePacs002Status(pacs002.getTransactionStatus());
         if (!STATUS_APPROVED.equalsIgnoreCase(lockedTransaction.getTransactionStatus())
-                && !STATUS_WAITING.equalsIgnoreCase(lockedTransaction.getTransactionStatus())) {
+                && !STATUS_PROCESSING.equalsIgnoreCase(lockedTransaction.getTransactionStatus())
+                && !STATUS_WAITING.equalsIgnoreCase(lockedTransaction.getTransactionStatus())
+                && !STATUS_COMPLETED.equalsIgnoreCase(lockedTransaction.getTransactionStatus())
+                && !STATUS_RETURN.equalsIgnoreCase(lockedTransaction.getTransactionStatus())
+                && !STATUS_REVERTED.equalsIgnoreCase(lockedTransaction.getTransactionStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "PACS002 can only be processed after approval");
         }
@@ -199,10 +227,23 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         Account settlementAccount = lockAccount(settlementDebit.getSettlementAccount());
         BigDecimal amount = requireAmount(settlementDebit.getAmount());
 
-        String status = normalizePacs002Status(pacs002.getTransactionStatus());
         log.info("Applying PACS002 status {} for transactionId={}, settlementAccount={}, amount={}",
                 status, lockedTransaction.getTransactionId(), settlementAccount.getAccountNumber(), amount);
-        if ("ACSC".equals(status) || "ACCP".equals(status)) {
+        if ("ACSC".equals(status)) {
+            boolean alreadyCredited = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                    lockedTransaction.getTransactionId(),
+                    SettlementTransactionType.CREDIT_TO_BENEFICIARY,
+                    SettlementTransactionStatus.SUCCESS);
+            if (alreadyCredited) {
+                settlementDebit.setPacs002Status(status);
+                settlementTransactionRepository.save(settlementDebit);
+                lockedTransaction.setTransactionStatus(STATUS_COMPLETED);
+                updateTransactionAndHeader(lockedTransaction);
+                log.info("PACS002 ACSC already settled for paymentId={}; duplicate beneficiary settlement skipped",
+                        lockedTransaction.getTransactionId());
+                return;
+            }
+
             debit(settlementAccount, amount);
             accountRepository.save(settlementAccount);
             Beneficiary beneficiary = resolveBeneficiary(
@@ -211,6 +252,11 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
             log.info("Resolved beneficiary record beneficiaryId={}, accountNumber={}, routingNumber={}, status={} for transactionId={}",
                     beneficiary.getBeneficiaryId(), beneficiary.getAccountNumber(), beneficiary.getRoutingNumber(),
                     beneficiary.getStatus(), lockedTransaction.getTransactionId());
+            accountRepository.findByAccountNumberForUpdate(beneficiary.getAccountNumber())
+                    .ifPresent(beneficiaryAccount -> {
+                        credit(beneficiaryAccount, amount);
+                        accountRepository.save(beneficiaryAccount);
+                    });
 
             settlementTransactionRepository.save(SettlementTransaction.builder()
                     .paymentId(lockedTransaction.getTransactionId())
@@ -228,13 +274,60 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
             settlementTransactionRepository.save(settlementDebit);
             lockedTransaction.setTransactionStatus(STATUS_COMPLETED);
         } else if ("RJCT".equals(status)) {
+            settlementDebit.setPacs002Status(status);
+            settlementTransactionRepository.save(settlementDebit);
+            if (!STATUS_REVERTED.equalsIgnoreCase(lockedTransaction.getTransactionStatus())) {
+                lockedTransaction.setTransactionStatus(STATUS_RETURN);
+            }
+        } else if ("ACCP".equals(status) || "ACSP".equals(status)) {
+            settlementDebit.setPacs002Status(status);
+            settlementTransactionRepository.save(settlementDebit);
+            lockedTransaction.setTransactionStatus(STATUS_PROCESSING);
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unsupported PACS002 status " + pacs002.getTransactionStatus());
+        }
+
+        updateTransactionAndHeader(lockedTransaction);
+        log.info("Processed PACS002 for paymentId={} with status={}", lockedTransaction.getTransactionId(), status);
+    }
+
+    @Override
+    @Transactional
+    public void revertToSender(Long transactionId) {
+        if (transactionId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "transactionId is required");
+        }
+        Transaction lockedTransaction = transactionRepository.findByTransactionIdForUpdate(transactionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
+        if (STATUS_REVERTED.equalsIgnoreCase(lockedTransaction.getTransactionStatus())) {
+            return;
+        }
+        if (!STATUS_RETURN.equalsIgnoreCase(lockedTransaction.getTransactionStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Transaction can be reverted only from RETURN status");
+        }
+
+        SettlementTransaction settlementDebit = settlementTransactionRepository
+                .findTopByPaymentIdAndTransactionTypeOrderByCreatedAtDesc(
+                        lockedTransaction.getTransactionId(),
+                        SettlementTransactionType.DEBIT_TO_SETTLEMENT)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Settlement transaction not found for paymentId " + lockedTransaction.getTransactionId()));
+
+        boolean alreadyReverted = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                lockedTransaction.getTransactionId(),
+                SettlementTransactionType.RETURN_TO_SENDER,
+                SettlementTransactionStatus.SUCCESS);
+        if (!alreadyReverted) {
+            BigDecimal amount = requireAmount(settlementDebit.getAmount());
+            Account settlementAccount = lockAccount(settlementDebit.getSettlementAccount());
             Account senderAccount = lockAccount(settlementDebit.getSenderAccount());
             debit(settlementAccount, amount);
             credit(senderAccount, amount);
             accountRepository.save(settlementAccount);
             accountRepository.save(senderAccount);
-            log.info("Returning funds to sender account {} for transactionId={}",
-                    senderAccount.getAccountNumber(), lockedTransaction.getTransactionId());
 
             settlementTransactionRepository.save(SettlementTransaction.builder()
                     .paymentId(lockedTransaction.getTransactionId())
@@ -245,17 +338,16 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                     .transactionType(SettlementTransactionType.RETURN_TO_SENDER)
                     .status(SettlementTransactionStatus.SUCCESS)
                     .pacs008MessageId(settlementDebit.getPacs008MessageId())
-                    .pacs002Status(status)
+                    .pacs002Status(settlementDebit.getPacs002Status())
                     .build());
-
-            settlementDebit.setPacs002Status(status);
-            settlementTransactionRepository.save(settlementDebit);
-            lockedTransaction.setTransactionStatus(STATUS_REJECTED);
-        } else {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unsupported PACS002 status " + pacs002.getTransactionStatus());
         }
 
+        lockedTransaction.setTransactionStatus(STATUS_REVERTED);
+        lockedTransaction.setPendingPaymentKey(null);
+        updateTransactionAndHeader(lockedTransaction);
+    }
+
+    private void updateTransactionAndHeader(Transaction lockedTransaction) {
         log.info("Updating transaction status for transactionId={} to {}", lockedTransaction.getTransactionId(),
                 lockedTransaction.getTransactionStatus());
         transactionRepository.saveAndFlush(lockedTransaction);
@@ -263,11 +355,8 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Message header not found for transactionId " + lockedTransaction.getTransactionId()));
-        log.info("Updating message header status for transactionId={} to {}", lockedTransaction.getTransactionId(),
-                lockedTransaction.getTransactionStatus());
         messageHeader.setMessageStatus(lockedTransaction.getTransactionStatus());
         messageHeaderRepository.saveAndFlush(messageHeader);
-        log.info("Processed PACS002 for paymentId={} with status={}", lockedTransaction.getTransactionId(), status);
     }
 
     private Account resolveSettlementAccount() {
