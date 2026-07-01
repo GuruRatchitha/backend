@@ -88,6 +88,12 @@ class TransactionServiceImplTest {
         assertEquals("<PACS008/>", response.getXmlMessages().getPacs008());
         assertEquals("<PACS002><TxSts>RJCT</TxSts></PACS002>", response.getXmlMessages().getPacs002());
         assertNull(response.getXmlMessages().getAdmi002());
+        assertEquals("<PACS008/>", response.getPacs008Xml());
+        assertEquals("<PACS002><TxSts>RJCT</TxSts></PACS002>", response.getPacs002Xml());
+        assertNull(response.getAdmi002Xml());
+        assertEquals(true, response.getHasPacs008());
+        assertEquals(true, response.getHasPacs002());
+        assertEquals(false, response.getHasAdmi002());
     }
 
     @Test
@@ -106,6 +112,9 @@ class TransactionServiceImplTest {
         assertEquals("<PACS008/>", response.getXmlMessages().getPacs008());
         assertNull(response.getXmlMessages().getPacs002());
         assertEquals("<ADMI002/>", response.getXmlMessages().getAdmi002());
+        assertEquals(true, response.getHasPacs008());
+        assertEquals(false, response.getHasPacs002());
+        assertEquals(true, response.getHasAdmi002());
     }
 
     @Test
@@ -120,6 +129,136 @@ class TransactionServiceImplTest {
 
         assertEquals("COMPLETED", response.getStatus());
         assertEquals("COMPLETED", response.getPaymentDetails().getStatus());
+        assertEquals(false, response.getHasPacs008());
+        assertEquals(false, response.getHasPacs002());
+        assertEquals(false, response.getHasAdmi002());
+        assertNull(response.getPacs008Xml());
+        assertNull(response.getPacs002Xml());
+        assertNull(response.getAdmi002Xml());
+    }
+
+    @Test
+    void detailsEnrichmentHandlesOnlyPacs008Generated() {
+        Transaction transaction = baseTransaction("WAITING_FOR_PACS002");
+        mockDetailDependencies(transaction);
+        String pacs008Xml = """
+                <Document xmlns:p="urn:fedwire">
+                    <p:UETR>123e4567-e89b-12d3-a456-426614174000</p:UETR>
+                </Document>
+                """;
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L))
+                .thenReturn(Optional.of(PACS008.builder()
+                        .uetr("db-uetr")
+                        .xmlPayload(pacs008Xml)
+                        .build()));
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals(true, response.getHasPacs008());
+        assertEquals(false, response.getHasPacs002());
+        assertEquals(false, response.getHasAdmi002());
+        assertEquals(pacs008Xml, response.getPacs008Xml());
+        assertNull(response.getPacs002Xml());
+        assertNull(response.getAdmi002Xml());
+        assertNull(response.getPacs002Reason());
+        assertNull(response.getAdmi002Reason());
+        assertEquals("db-uetr", response.getUetr());
+        assertEquals(LocalDateTime.of(2026, 6, 30, 10, 0), response.getPaymentTimestamp());
+    }
+
+    @Test
+    void detailsEnrichmentHandlesPacs002Accepted() {
+        Transaction transaction = baseTransaction("PROCESSING");
+        mockDetailDependencies(transaction);
+        String pacs002Xml = "<Document xmlns:p=\"urn:fedwire\"><p:TxSts>ACSC</p:TxSts></Document>";
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L))
+                .thenReturn(Optional.of(PACS008.builder().xmlPayload("<PACS008/>").build()));
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L))
+                .thenReturn(Optional.of(PACS002.builder()
+                        .transactionStatus("ACSC")
+                        .xmlPayload(pacs002Xml)
+                        .build()));
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals(true, response.getHasPacs008());
+        assertEquals(true, response.getHasPacs002());
+        assertEquals(false, response.getHasAdmi002());
+        assertEquals(pacs002Xml, response.getPacs002Xml());
+        assertNull(response.getPacs002Reason());
+        assertNull(response.getAdmi002Reason());
+    }
+
+    @Test
+    void detailsEnrichmentParsesPacs002RejectedReason() {
+        Transaction transaction = baseTransaction("REJECTED");
+        mockDetailDependencies(transaction);
+        String pacs002Xml = """
+                <Document xmlns:p="urn:fedwire">
+                    <p:TxSts>RJCT</p:TxSts>
+                    <p:AddtlInf>
+                        Creditor or Instructed or Receiving routing number is not found.
+                    </p:AddtlInf>
+                </Document>
+                """;
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L))
+                .thenReturn(Optional.of(PACS008.builder().xmlPayload("<PACS008/>").build()));
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L))
+                .thenReturn(Optional.of(PACS002.builder()
+                        .transactionStatus("RJCT")
+                        .xmlPayload(pacs002Xml)
+                        .build()));
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals("Creditor or Instructed or Receiving routing number is not found.",
+                response.getPacs002Reason());
+        assertNull(response.getAdmi002Reason());
+    }
+
+    @Test
+    void detailsEnrichmentParsesAdmi002Reason() {
+        Transaction transaction = baseTransaction("FAILED");
+        mockDetailDependencies(transaction);
+        String admi002Xml = """
+                <Document xmlns:p="urn:fedwire">
+                    <p:RsnDesc>Amt field validation failed</p:RsnDesc>
+                </Document>
+                """;
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L))
+                .thenReturn(Optional.of(PACS008.builder().xmlPayload("<PACS008/>").build()));
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L))
+                .thenReturn(Optional.of(ADMI002.builder()
+                        .xmlPayload(admi002Xml)
+                        .build()));
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals(true, response.getHasAdmi002());
+        assertEquals(admi002Xml, response.getAdmi002Xml());
+        assertEquals("Amt field validation failed", response.getAdmi002Reason());
+        assertNull(response.getPacs002Reason());
+    }
+
+    @Test
+    void detailsEnrichmentParsesUetrFromPacs008XmlWhenDatabaseValueMissing() {
+        Transaction transaction = baseTransaction("WAITING_FOR_PACS002");
+        mockDetailDependencies(transaction);
+        when(pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(49L))
+                .thenReturn(Optional.of(PACS008.builder()
+                        .xmlPayload("<Document xmlns:p=\"urn:fedwire\"><p:UETR>xml-uetr</p:UETR></Document>")
+                        .build()));
+        when(pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+        when(admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(49L)).thenReturn(Optional.empty());
+
+        TransactionDetailResponse response = transactionService.getEmployeeTransactionDetails(49L);
+
+        assertEquals("xml-uetr", response.getUetr());
     }
 
     @Test
@@ -137,6 +276,7 @@ class TransactionServiceImplTest {
         assertEquals("APPROVED", response.get(1).getStatus());
         assertEquals("REJECTED", response.get(2).getStatus());
         assertEquals("COMPLETED", response.get(3).getStatus());
+        assertEquals(LocalDateTime.of(2026, 6, 30, 10, 0), response.get(0).getPaymentTimestamp());
     }
 
     private void mockDetailDependencies(Transaction transaction) {

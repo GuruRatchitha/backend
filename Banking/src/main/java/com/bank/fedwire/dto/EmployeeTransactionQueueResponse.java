@@ -29,4 +29,6 @@ public class EmployeeTransactionQueueResponse {
     private String status;
 
     private LocalDateTime paymentDate;
+
+    private LocalDateTime paymentTimestamp;
 }
