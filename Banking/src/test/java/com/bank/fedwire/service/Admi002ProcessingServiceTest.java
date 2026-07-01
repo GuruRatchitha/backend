@@ -7,6 +7,7 @@ import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.repository.ADMI002Repository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS008Repository;
+import com.bank.fedwire.repository.SettlementTransactionRepository;
 import com.bank.fedwire.repository.TransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +37,9 @@ class Admi002ProcessingServiceTest {
 
     @Mock
     private MessageHeaderRepository messageHeaderRepository;
+
+    @Mock
+    private SettlementTransactionRepository settlementTransactionRepository;
 
     @Mock
     private Admi002ParserService admi002ParserService;

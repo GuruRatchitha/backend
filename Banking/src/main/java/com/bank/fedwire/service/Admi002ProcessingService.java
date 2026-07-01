@@ -4,11 +4,14 @@ import com.bank.fedwire.dto.Admi002MessageDto;
 import com.bank.fedwire.entity.ADMI002;
 import com.bank.fedwire.entity.MessageHeader;
 import com.bank.fedwire.entity.PACS008;
+import com.bank.fedwire.entity.SettlementTransactionStatus;
+import com.bank.fedwire.entity.SettlementTransactionType;
 import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.entity.TransactionStatus;
 import com.bank.fedwire.repository.ADMI002Repository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS008Repository;
+import com.bank.fedwire.repository.SettlementTransactionRepository;
 import com.bank.fedwire.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +33,7 @@ public class Admi002ProcessingService {
     private final PACS008Repository pacs008Repository;
     private final TransactionRepository transactionRepository;
     private final MessageHeaderRepository messageHeaderRepository;
+    private final SettlementTransactionRepository settlementTransactionRepository;
     private final Admi002ParserService admi002ParserService;
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
@@ -145,13 +149,19 @@ public class Admi002ProcessingService {
     private void markTransactionAdmi002Received(Transaction transaction) {
         Transaction lockedTransaction = transactionRepository.findByTransactionIdForUpdate(transaction.getTransactionId())
                 .orElse(transaction);
-        lockedTransaction.setTransactionStatus(TransactionStatus.FAILED.name());
+        String status = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                lockedTransaction.getTransactionId(),
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT,
+                SettlementTransactionStatus.SUCCESS)
+                ? TransactionStatus.RETURN.name()
+                : TransactionStatus.FAILED.name();
+        lockedTransaction.setTransactionStatus(status);
         lockedTransaction.setPendingPaymentKey(null);
         transactionRepository.saveAndFlush(lockedTransaction);
 
         messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(lockedTransaction.getTransactionId())
                 .ifPresent(messageHeader -> {
-                    messageHeader.setMessageStatus(TransactionStatus.FAILED.name());
+                    messageHeader.setMessageStatus(status);
                     messageHeaderRepository.saveAndFlush(messageHeader);
                 });
     }

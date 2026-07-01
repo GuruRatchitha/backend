@@ -87,8 +87,14 @@ class SettlementTransactionServiceImplTest {
 
         when(accountRepository.findByAccountType("SETTLEMENT"))
                 .thenReturn(Optional.of(account));
+        when(settlementTransactionRepository.sumAmountByTransactionType(SettlementTransactionType.DEBIT_TO_SETTLEMENT))
+                .thenReturn(new BigDecimal("1000.00"));
+        when(settlementTransactionRepository.sumAmountByTransactionType(SettlementTransactionType.CREDIT_TO_BENEFICIARY))
+                .thenReturn(new BigDecimal("400.00"));
         when(settlementTransactionRepository.sumAmountByTransactionType(SettlementTransactionType.RETURN_TO_SENDER))
-                .thenReturn(new BigDecimal("375.00"));
+                .thenReturn(new BigDecimal("100.00"));
+        when(settlementTransactionRepository.sumAmountWaitingToRevert())
+                .thenReturn(new BigDecimal("125.00"));
 
         SettlementAccountResponse response = settlementTransactionService.getSettlementAccount();
 
@@ -99,8 +105,9 @@ class SettlementTransactionServiceImplTest {
         assertEquals("SETTLEMENT", response.accountType());
         assertEquals("INR", response.currency());
         assertEquals(new BigDecimal("2500.00"), response.balance());
-        assertEquals(new BigDecimal("2500.00"), response.currentBalance());
-        assertEquals(new BigDecimal("375.00"), response.revertedAmountBalance());
+        assertEquals(new BigDecimal("375.00"), response.currentBalance());
+        assertEquals(new BigDecimal("125.00"), response.revertAmount());
+        assertEquals(new BigDecimal("125.00"), response.revertedAmountBalance());
         assertEquals("ACTIVE", response.status());
         assertEquals(LocalDateTime.of(2026, 6, 25, 9, 30), response.createdDate());
         assertEquals(LocalDateTime.of(2026, 6, 26, 10, 15), response.updatedDate());
@@ -172,6 +179,7 @@ class SettlementTransactionServiceImplTest {
         assertEquals("CURRENT", creditedResponse.receiverAccountType());
         assertEquals("11111111-2222-3333-4444-555555555555", creditedResponse.uetr());
         assertEquals(LocalDateTime.of(2026, 6, 30, 10, 0), creditedResponse.dateTime());
+        assertEquals(new BigDecimal("125.00"), creditedResponse.amount());
         assertEquals("Credited", creditedResponse.status());
         assertFalse(creditedResponse.status().contains("Amount"));
 
@@ -180,6 +188,7 @@ class SettlementTransactionServiceImplTest {
         assertEquals("222222222", beneficiaryResponse.accountNumber());
         assertEquals("111111111", beneficiaryResponse.senderAccountNumber());
         assertEquals("222222222", beneficiaryResponse.beneficiaryAccountNumber());
+        assertEquals(new BigDecimal("-125.00"), beneficiaryResponse.amount());
         assertEquals("Debited", beneficiaryResponse.status());
         assertFalse(beneficiaryResponse.status().contains("Amount"));
 
@@ -188,6 +197,7 @@ class SettlementTransactionServiceImplTest {
         assertEquals("111111111", returnedResponse.accountNumber());
         assertEquals("111111111", returnedResponse.senderAccountNumber());
         assertEquals("222222222", returnedResponse.beneficiaryAccountNumber());
+        assertEquals(new BigDecimal("-125.00"), returnedResponse.amount());
         assertEquals("Returned", returnedResponse.status());
         assertFalse(returnedResponse.status().contains("Amount"));
     }
@@ -232,6 +242,59 @@ class SettlementTransactionServiceImplTest {
                 saved.getTransactionType() == SettlementTransactionType.RETURN_TO_SENDER));
         assertEquals("RETURN", transaction.getTransactionStatus());
         assertEquals("RETURN", messageHeader.getMessageStatus());
+    }
+
+    @Test
+    void revertToSenderCreditsSenderDebitsSettlementAndCreatesReturnLedgerRow() {
+        Transaction transaction = Transaction.builder()
+                .transactionId(7001L)
+                .transactionStatus("RETURN")
+                .build();
+        SettlementTransaction settlementDebit = settlementTransaction(
+                1L,
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT,
+                "111111111",
+                "222222222");
+        Account settlementAccount = Account.builder()
+                .accountNumber("999900001")
+                .balance(new BigDecimal("125.00"))
+                .build();
+        Account senderAccount = Account.builder()
+                .accountNumber("111111111")
+                .balance(new BigDecimal("25.00"))
+                .build();
+        MessageHeader messageHeader = MessageHeader.builder()
+                .transactionId(7001L)
+                .messageStatus("RETURN")
+                .build();
+
+        when(transactionRepository.findByTransactionIdForUpdate(7001L))
+                .thenReturn(Optional.of(transaction));
+        when(settlementTransactionRepository.findTopByPaymentIdAndTransactionTypeOrderByCreatedAtDesc(
+                7001L,
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT))
+                .thenReturn(Optional.of(settlementDebit));
+        when(settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                7001L,
+                SettlementTransactionType.RETURN_TO_SENDER,
+                SettlementTransactionStatus.SUCCESS))
+                .thenReturn(false);
+        when(accountRepository.findByAccountNumberForUpdate("999900001"))
+                .thenReturn(Optional.of(settlementAccount));
+        when(accountRepository.findByAccountNumberForUpdate("111111111"))
+                .thenReturn(Optional.of(senderAccount));
+        when(messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(7001L))
+                .thenReturn(Optional.of(messageHeader));
+
+        settlementTransactionService.revertToSender(7001L);
+
+        assertEquals(new BigDecimal("0.00"), settlementAccount.getBalance());
+        assertEquals(new BigDecimal("150.00"), senderAccount.getBalance());
+        verify(settlementTransactionRepository).save(argThat(saved ->
+                saved.getTransactionType() == SettlementTransactionType.RETURN_TO_SENDER
+                        && saved.getAmount().compareTo(new BigDecimal("125.00")) == 0));
+        assertEquals("REVERTED", transaction.getTransactionStatus());
+        assertEquals("REVERTED", messageHeader.getMessageStatus());
     }
 
     private SettlementTransaction settlementTransaction(

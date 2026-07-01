@@ -13,6 +13,7 @@ public record SettlementAccountResponse(
         String currency,
         BigDecimal balance,
         BigDecimal currentBalance,
+        BigDecimal revertAmount,
         BigDecimal revertedAmountBalance,
         String status,
         LocalDateTime createdDate,

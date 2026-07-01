@@ -240,11 +240,8 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                         HttpStatus.NOT_FOUND,
                         "Settlement transaction not found for paymentId " + lockedTransaction.getTransactionId()));
 
-        Account settlementAccount = lockAccount(settlementDebit.getSettlementAccount());
-        BigDecimal amount = requireAmount(settlementDebit.getAmount());
-
         log.info("Applying PACS002 status {} for transactionId={}, settlementAccount={}, amount={}",
-                status, lockedTransaction.getTransactionId(), settlementAccount.getAccountNumber(), amount);
+                status, lockedTransaction.getTransactionId(), settlementDebit.getSettlementAccount(), settlementDebit.getAmount());
         if ("ACSC".equals(status)) {
             boolean alreadyCredited = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
                     lockedTransaction.getTransactionId(),
@@ -260,6 +257,8 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                 return;
             }
 
+            Account settlementAccount = lockAccount(settlementDebit.getSettlementAccount());
+            BigDecimal amount = requireAmount(settlementDebit.getAmount());
             debit(settlementAccount, amount);
             accountRepository.save(settlementAccount);
             Beneficiary beneficiary = resolveBeneficiary(
@@ -458,8 +457,18 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
     }
 
     private SettlementAccountResponse toSettlementAccountResponse(Account account) {
-        BigDecimal revertedAmountBalance = nullToZero(settlementTransactionRepository.sumAmountByTransactionType(
+        BigDecimal creditedToSettlement = nullToZero(settlementTransactionRepository.sumAmountByTransactionType(
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT));
+        BigDecimal debitedToBeneficiary = nullToZero(settlementTransactionRepository.sumAmountByTransactionType(
+                SettlementTransactionType.CREDIT_TO_BENEFICIARY));
+        BigDecimal returnedToSender = nullToZero(settlementTransactionRepository.sumAmountByTransactionType(
                 SettlementTransactionType.RETURN_TO_SENDER));
+        BigDecimal revertAmount = nullToZero(settlementTransactionRepository.sumAmountWaitingToRevert());
+        BigDecimal currentBalance = creditedToSettlement
+                .subtract(debitedToBeneficiary)
+                .subtract(returnedToSender)
+                .subtract(revertAmount);
+
         return new SettlementAccountResponse(
                 account.getAccountId(),
                 account.getAccountNumber(),
@@ -468,8 +477,9 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                 account.getAccountType(),
                 account.getCurrency(),
                 account.getBalance(),
-                account.getBalance(),
-                revertedAmountBalance,
+                currentBalance,
+                revertAmount,
+                revertAmount,
                 account.getStatus(),
                 account.getCreatedDate(),
                 account.getUpdatedDate(),
@@ -504,7 +514,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                 settlementTransaction.getSenderAccount(),
                 settlementTransaction.getBeneficiaryAccount(),
                 settlementTransaction.getSettlementAccount(),
-                settlementTransaction.getAmount(),
+                displayAmount(settlementTransaction),
                 resolveHistoryStatus(settlementTransaction.getTransactionType()),
                 settlementTransaction.getPacs008MessageId(),
                 pacs008 != null ? pacs008.getUetr() : null,
@@ -577,6 +587,16 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
             case CREDIT_TO_BENEFICIARY -> "Debited";
             case RETURN_TO_SENDER -> "Returned";
         };
+    }
+
+    private BigDecimal displayAmount(SettlementTransaction settlementTransaction) {
+        BigDecimal amount = nullToZero(settlementTransaction.getAmount());
+        SettlementTransactionType transactionType = settlementTransaction.getTransactionType();
+        if (transactionType == SettlementTransactionType.CREDIT_TO_BENEFICIARY
+                || transactionType == SettlementTransactionType.RETURN_TO_SENDER) {
+            return amount.abs().negate();
+        }
+        return amount;
     }
 
     private Specification<SettlementTransaction> buildSpecification(

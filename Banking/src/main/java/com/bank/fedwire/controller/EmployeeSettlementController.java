@@ -32,6 +32,7 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 public class EmployeeSettlementController {
 
     private static final String DEFAULT_SORT = "createdAt,desc";
+    private static final int PAGE_SIZE = 10;
 
     private final SettlementTransactionService settlementTransactionService;
 
@@ -47,17 +48,13 @@ public class EmployeeSettlementController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String transactionType,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = DEFAULT_SORT) String sort) {
 
         if (page < 0) {
             throw new ResponseStatusException(BAD_REQUEST, "page must be greater than or equal to 0");
         }
-        if (size < 1 || size > 100) {
-            throw new ResponseStatusException(BAD_REQUEST, "size must be between 1 and 100");
-        }
 
-        Pageable pageable = PageRequest.of(page, size, parseSort(sort));
+        Pageable pageable = PageRequest.of(page, PAGE_SIZE, parseSort(sort));
         Page<SettlementTransactionResponse> transactionPage = settlementTransactionService.getSettlementTransactions(
                 paymentId,
                 accountNumber,
@@ -99,6 +96,10 @@ public class EmployeeSettlementController {
             }
         }
 
-        return Sort.by(direction, property);
+        Sort parsedSort = Sort.by(direction, property);
+        if ("createdAt".equals(property)) {
+            return parsedSort.and(Sort.by(direction, "settlementTransactionId"));
+        }
+        return parsedSort;
     }
 }
