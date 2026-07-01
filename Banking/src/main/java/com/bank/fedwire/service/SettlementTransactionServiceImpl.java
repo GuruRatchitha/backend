@@ -180,7 +180,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
             return;
         }
 
-        debit(senderAccount, amount);
+        debitSenderForApproval(senderAccount, amount);
         credit(settlementAccount, amount);
         accountRepository.save(senderAccount);
         accountRepository.save(settlementAccount);
@@ -436,6 +436,12 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Insufficient balance in account " + account.getAccountNumber());
         }
+        account.setBalance(currentBalance.subtract(amount));
+        account.setUpdatedDate(LocalDateTime.now(ZoneOffset.UTC));
+    }
+
+    private void debitSenderForApproval(Account account, BigDecimal amount) {
+        BigDecimal currentBalance = account.getBalance() == null ? BigDecimal.ZERO : account.getBalance();
         account.setBalance(currentBalance.subtract(amount));
         account.setUpdatedDate(LocalDateTime.now(ZoneOffset.UTC));
     }

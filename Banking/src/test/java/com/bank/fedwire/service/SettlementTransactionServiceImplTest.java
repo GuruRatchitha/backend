@@ -10,6 +10,7 @@ import com.bank.fedwire.entity.SettlementTransaction;
 import com.bank.fedwire.entity.SettlementTransactionStatus;
 import com.bank.fedwire.entity.SettlementTransactionType;
 import com.bank.fedwire.entity.Transaction;
+import com.bank.fedwire.event.Pacs008ApprovedEvent;
 import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
@@ -232,6 +233,59 @@ class SettlementTransactionServiceImplTest {
         assertEquals(new BigDecimal("-125.00"), returnedResponse.amount());
         assertEquals("Returned", returnedResponse.status());
         assertFalse(returnedResponse.status().contains("Amount"));
+    }
+
+    @Test
+    void processApprovalAllowsPayaptSubmissionWhenSenderBalanceIsInsufficient() {
+        Transaction transaction = Transaction.builder()
+                .transactionId(7001L)
+                .accountNumber("111111111")
+                .amount(new BigDecimal("125.00"))
+                .transactionStatus("PENDING")
+                .beneficiaryAccountNumber("222222222")
+                .build();
+        PACS008 pacs008 = PACS008.builder()
+                .transactionId(7001L)
+                .messageId("PACS008-7001")
+                .build();
+        MessageHeader messageHeader = MessageHeader.builder()
+                .transactionId(7001L)
+                .messageStatus("PENDING")
+                .build();
+        Account senderAccount = Account.builder()
+                .accountNumber("111111111")
+                .balance(new BigDecimal("50.00"))
+                .build();
+        Account settlementAccount = Account.builder()
+                .accountNumber("999900001")
+                .accountType("SETTLEMENT")
+                .balance(BigDecimal.ZERO)
+                .build();
+
+        when(transactionRepository.findByTransactionIdForUpdate(7001L))
+                .thenReturn(Optional.of(transaction));
+        when(messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(7001L))
+                .thenReturn(Optional.of(messageHeader));
+        when(accountRepository.findByAccountNumberForUpdate("111111111"))
+                .thenReturn(Optional.of(senderAccount));
+        when(accountRepository.findByAccountTypeForUpdate("SETTLEMENT"))
+                .thenReturn(Optional.of(settlementAccount));
+        when(settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                7001L,
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT,
+                SettlementTransactionStatus.SUCCESS))
+                .thenReturn(false);
+        when(settlementTransactionRepository.save(any(SettlementTransaction.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        settlementTransactionService.processApproval(transaction, pacs008);
+
+        assertEquals(new BigDecimal("-75.00"), senderAccount.getBalance());
+        assertEquals(new BigDecimal("125.00"), settlementAccount.getBalance());
+        assertEquals("PROCESSING", transaction.getTransactionStatus());
+        assertEquals("PROCESSING", messageHeader.getMessageStatus());
+        verify(pacs008XmlGeneratorService).generateXml(7001L);
+        verify(eventPublisher).publishEvent(new Pacs008ApprovedEvent(7001L));
     }
 
     @Test
