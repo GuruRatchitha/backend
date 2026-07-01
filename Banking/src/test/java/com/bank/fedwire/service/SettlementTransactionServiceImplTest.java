@@ -3,12 +3,17 @@ package com.bank.fedwire.service;
 import com.bank.fedwire.dto.SettlementAccountResponse;
 import com.bank.fedwire.dto.SettlementTransactionResponse;
 import com.bank.fedwire.entity.Account;
+import com.bank.fedwire.entity.MessageHeader;
+import com.bank.fedwire.entity.PACS002;
+import com.bank.fedwire.entity.PACS008;
 import com.bank.fedwire.entity.SettlementTransaction;
 import com.bank.fedwire.entity.SettlementTransactionStatus;
 import com.bank.fedwire.entity.SettlementTransactionType;
+import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
+import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.repository.SettlementTransactionRepository;
 import com.bank.fedwire.repository.TransactionRepository;
 import org.junit.jupiter.api.Test;
@@ -16,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -29,7 +35,10 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,6 +52,9 @@ class SettlementTransactionServiceImplTest {
 
     @Mock
     private MessageHeaderRepository messageHeaderRepository;
+
+    @Mock
+    private PACS008Repository pacs008Repository;
 
     @Mock
     private SettlementTransactionRepository settlementTransactionRepository;
@@ -75,18 +87,25 @@ class SettlementTransactionServiceImplTest {
 
         when(accountRepository.findByAccountType("SETTLEMENT"))
                 .thenReturn(Optional.of(account));
+        when(settlementTransactionRepository.sumAmountByTransactionType(SettlementTransactionType.RETURN_TO_SENDER))
+                .thenReturn(new BigDecimal("375.00"));
 
         SettlementAccountResponse response = settlementTransactionService.getSettlementAccount();
 
         assertEquals(100L, response.accountId());
         assertEquals("999900001", response.accountNumber());
+        assertEquals("999900001", response.settlementAccountNumber());
         assertEquals("ABC Settlement Account", response.accountName());
         assertEquals("SETTLEMENT", response.accountType());
         assertEquals("INR", response.currency());
         assertEquals(new BigDecimal("2500.00"), response.balance());
+        assertEquals(new BigDecimal("2500.00"), response.currentBalance());
+        assertEquals(new BigDecimal("375.00"), response.revertedAmountBalance());
         assertEquals("ACTIVE", response.status());
         assertEquals(LocalDateTime.of(2026, 6, 25, 9, 30), response.createdDate());
         assertEquals(LocalDateTime.of(2026, 6, 26, 10, 15), response.updatedDate());
+        assertEquals(List.of(), response.transactionHistory());
+        verify(settlementTransactionRepository, never()).findAll(any(Sort.class));
     }
 
     @Test
@@ -113,6 +132,26 @@ class SettlementTransactionServiceImplTest {
                         List.of(creditedToSettlement, debitedToBeneficiary, returnedToSender),
                         pageable,
                         3));
+        when(pacs008Repository.findByTransactionIdIn(argThat(transactionIds -> transactionIds.contains(7001L))))
+                .thenReturn(List.of(PACS008.builder()
+                        .transactionId(7001L)
+                        .uetr("11111111-2222-3333-4444-555555555555")
+                        .debtorName("Sender Name")
+                        .creditorName("Receiver Name")
+                        .build()));
+        when(accountRepository.findByAccountNumberIn(argThat(accountNumbers ->
+                accountNumbers.contains("111111111") && accountNumbers.contains("222222222"))))
+                .thenReturn(List.of(
+                        Account.builder()
+                                .accountNumber("111111111")
+                                .accountName("Sender Name")
+                                .accountType("SAVINGS")
+                                .build(),
+                        Account.builder()
+                                .accountNumber("222222222")
+                                .accountName("Receiver Name")
+                                .accountType("CURRENT")
+                                .build()));
 
         Page<SettlementTransactionResponse> response = settlementTransactionService.getSettlementTransactions(
                 null,
@@ -125,8 +164,15 @@ class SettlementTransactionServiceImplTest {
         assertEquals(7001L, creditedResponse.paymentId());
         assertEquals("111111111", creditedResponse.accountNumber());
         assertEquals("111111111", creditedResponse.senderAccountNumber());
+        assertEquals("Sender Name", creditedResponse.senderName());
+        assertEquals("SAVINGS", creditedResponse.senderAccountType());
         assertEquals("222222222", creditedResponse.beneficiaryAccountNumber());
-        assertEquals("Credited To Settlement", creditedResponse.status());
+        assertEquals("222222222", creditedResponse.receiverAccountNumber());
+        assertEquals("Receiver Name", creditedResponse.receiverName());
+        assertEquals("CURRENT", creditedResponse.receiverAccountType());
+        assertEquals("11111111-2222-3333-4444-555555555555", creditedResponse.uetr());
+        assertEquals(LocalDateTime.of(2026, 6, 30, 10, 0), creditedResponse.dateTime());
+        assertEquals("Credited", creditedResponse.status());
         assertFalse(creditedResponse.status().contains("Amount"));
 
         SettlementTransactionResponse beneficiaryResponse = response.getContent().get(1);
@@ -134,7 +180,7 @@ class SettlementTransactionServiceImplTest {
         assertEquals("222222222", beneficiaryResponse.accountNumber());
         assertEquals("111111111", beneficiaryResponse.senderAccountNumber());
         assertEquals("222222222", beneficiaryResponse.beneficiaryAccountNumber());
-        assertEquals("Debited From Settlement", beneficiaryResponse.status());
+        assertEquals("Debited", beneficiaryResponse.status());
         assertFalse(beneficiaryResponse.status().contains("Amount"));
 
         SettlementTransactionResponse returnedResponse = response.getContent().get(2);
@@ -142,8 +188,50 @@ class SettlementTransactionServiceImplTest {
         assertEquals("111111111", returnedResponse.accountNumber());
         assertEquals("111111111", returnedResponse.senderAccountNumber());
         assertEquals("222222222", returnedResponse.beneficiaryAccountNumber());
-        assertEquals("Debited From Settlement", returnedResponse.status());
+        assertEquals("Returned", returnedResponse.status());
         assertFalse(returnedResponse.status().contains("Amount"));
+    }
+
+    @Test
+    void processPacs002RejectedMarksTransactionReturnWithoutCreditingSender() {
+        Transaction transaction = Transaction.builder()
+                .transactionId(7001L)
+                .accountNumber("111111111")
+                .amount(new BigDecimal("125.00"))
+                .transactionStatus("WAITING_FOR_PACS002")
+                .beneficiaryAccountNumber("222222222")
+                .beneficiaryRoutingNumber("123456789")
+                .build();
+        PACS002 pacs002 = PACS002.builder()
+                .transactionStatus("RJCT")
+                .messageId("PACS002-7001")
+                .build();
+        SettlementTransaction settlementDebit = settlementTransaction(
+                1L,
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT,
+                "111111111",
+                "222222222");
+        MessageHeader messageHeader = MessageHeader.builder()
+                .transactionId(7001L)
+                .messageStatus("WAITING_FOR_PACS002")
+                .build();
+
+        when(transactionRepository.findByTransactionIdForUpdate(7001L))
+                .thenReturn(Optional.of(transaction));
+        when(settlementTransactionRepository.findTopByPaymentIdAndTransactionTypeOrderByCreatedAtDesc(
+                7001L,
+                SettlementTransactionType.DEBIT_TO_SETTLEMENT))
+                .thenReturn(Optional.of(settlementDebit));
+        when(messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(7001L))
+                .thenReturn(Optional.of(messageHeader));
+
+        settlementTransactionService.processPacs002(transaction, pacs002);
+
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(settlementTransactionRepository, never()).save(argThat(saved ->
+                saved.getTransactionType() == SettlementTransactionType.RETURN_TO_SENDER));
+        assertEquals("RETURN", transaction.getTransactionStatus());
+        assertEquals("RETURN", messageHeader.getMessageStatus());
     }
 
     private SettlementTransaction settlementTransaction(

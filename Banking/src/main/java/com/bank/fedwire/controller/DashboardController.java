@@ -2,12 +2,12 @@ package com.bank.fedwire.controller;
 
 import com.bank.fedwire.dto.AccountStatisticsResponse;
 import com.bank.fedwire.dto.DashboardApiResponse;
-import com.bank.fedwire.dto.DashboardSettlementTransactionResponse;
 import com.bank.fedwire.dto.DashboardSummaryResponse;
 import com.bank.fedwire.dto.PendingBeneficiaryResponse;
 import com.bank.fedwire.dto.PendingTransactionResponse;
 import com.bank.fedwire.dto.RecentActivityResponse;
 import com.bank.fedwire.dto.RecentCustomerResponse;
+import com.bank.fedwire.dto.SettlementTransactionResponse;
 import com.bank.fedwire.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -67,7 +67,7 @@ public class DashboardController {
     }
 
     @GetMapping("/recent-settlement-transactions")
-    public ResponseEntity<DashboardApiResponse<List<DashboardSettlementTransactionResponse>>> getRecentSettlementTransactions(
+    public ResponseEntity<DashboardApiResponse<List<SettlementTransactionResponse>>> getRecentSettlementTransactions(
             @RequestHeader("X-User-Id") Long employeeUserId) {
         return ok("Recent settlement transactions retrieved successfully.",
                 dashboardService.getRecentSettlementTransactions(employeeUserId));

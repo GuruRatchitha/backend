@@ -9,12 +9,15 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
 public interface PACS008Repository extends JpaRepository<PACS008, Long> {
 
     Optional<PACS008> findTopByTransactionIdOrderByCreatedDateDesc(Long transactionId);
+
+    List<PACS008> findByTransactionIdIn(Collection<Long> transactionIds);
 
     Optional<PACS008> findByTransferId(String transferId);
 

@@ -5,8 +5,11 @@ import com.bank.fedwire.entity.SettlementTransactionStatus;
 import com.bank.fedwire.entity.SettlementTransactionType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,4 +28,11 @@ public interface SettlementTransactionRepository extends JpaRepository<Settlemen
 
     boolean existsByPaymentIdAndTransactionTypeAndStatus(
             Long paymentId, SettlementTransactionType transactionType, SettlementTransactionStatus status);
+
+    @Query("""
+            select coalesce(sum(st.amount), 0)
+            from SettlementTransaction st
+            where st.transactionType = :transactionType
+            """)
+    BigDecimal sumAmountByTransactionType(@Param("transactionType") SettlementTransactionType transactionType);
 }

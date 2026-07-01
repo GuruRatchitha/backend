@@ -15,12 +15,14 @@ import com.bank.fedwire.entity.TransactionStatus;
 import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
+import com.bank.fedwire.repository.PACS008Repository;
 import com.bank.fedwire.repository.SettlementTransactionRepository;
 import com.bank.fedwire.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -34,6 +36,12 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.Predicate;
@@ -54,6 +62,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
     private final AccountRepository accountRepository;
     private final BeneficiaryRepository beneficiaryRepository;
     private final MessageHeaderRepository messageHeaderRepository;
+    private final PACS008Repository pacs008Repository;
     private final SettlementTransactionRepository settlementTransactionRepository;
     private final TransactionRepository transactionRepository;
     private final Pacs008XmlGeneratorService pacs008XmlGeneratorService;
@@ -110,8 +119,15 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                 ? pageable
                 : PageRequest.of(0, Integer.MAX_VALUE, Sort.by(Sort.Direction.DESC, "createdAt"));
         Specification<SettlementTransaction> specification = buildSpecification(paymentId, accountNumber, status, transactionType);
-        Page<SettlementTransactionResponse> result = settlementTransactionRepository.findAll(specification, effectivePageable)
-                .map(this::toResponse);
+        Page<SettlementTransaction> transactionPage = settlementTransactionRepository.findAll(specification, effectivePageable);
+        SettlementResponseContext responseContext = buildResponseContext(transactionPage.getContent());
+        List<SettlementTransactionResponse> responses = transactionPage.getContent().stream()
+                .map(settlementTransaction -> toResponse(settlementTransaction, responseContext))
+                .toList();
+        Page<SettlementTransactionResponse> result = new PageImpl<>(
+                responses,
+                effectivePageable,
+                transactionPage.getTotalElements());
         log.debug("Loaded {} settlement transactions for paymentId={}, accountNumber={}, status={}, type={}",
                 result.getNumberOfElements(), paymentId, accountNumber, status, transactionType);
         return result;
@@ -442,34 +458,106 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
     }
 
     private SettlementAccountResponse toSettlementAccountResponse(Account account) {
+        BigDecimal revertedAmountBalance = nullToZero(settlementTransactionRepository.sumAmountByTransactionType(
+                SettlementTransactionType.RETURN_TO_SENDER));
         return new SettlementAccountResponse(
                 account.getAccountId(),
+                account.getAccountNumber(),
                 account.getAccountNumber(),
                 account.getAccountName(),
                 account.getAccountType(),
                 account.getCurrency(),
                 account.getBalance(),
+                account.getBalance(),
+                revertedAmountBalance,
                 account.getStatus(),
                 account.getCreatedDate(),
-                account.getUpdatedDate());
+                account.getUpdatedDate(),
+                List.of());
     }
 
     private SettlementTransactionResponse toResponse(SettlementTransaction settlementTransaction) {
+        return toResponse(settlementTransaction, buildResponseContext(List.of(settlementTransaction)));
+    }
+
+    private SettlementTransactionResponse toResponse(
+            SettlementTransaction settlementTransaction,
+            SettlementResponseContext responseContext) {
+        PACS008 pacs008 = responseContext.pacs008ByTransactionId().get(settlementTransaction.getPaymentId());
+        Account senderAccount = responseContext.accountsByNumber().get(settlementTransaction.getSenderAccount());
+        Account receiverAccount = responseContext.accountsByNumber().get(settlementTransaction.getBeneficiaryAccount());
+
         return new SettlementTransactionResponse(
                 settlementTransaction.getSettlementTransactionId(),
                 settlementTransaction.getPaymentId(),
                 resolveHistoryAccountNumber(settlementTransaction),
                 settlementTransaction.getSenderAccount(),
+                firstNonBlank(senderAccount != null ? senderAccount.getAccountName() : null,
+                        pacs008 != null ? pacs008.getDebtorName() : null),
+                senderAccount != null ? senderAccount.getAccountType() : null,
                 settlementTransaction.getBeneficiaryAccount(),
+                settlementTransaction.getBeneficiaryAccount(),
+                firstNonBlank(
+                        receiverAccount != null ? receiverAccount.getAccountName() : null,
+                        pacs008 != null ? pacs008.getCreditorName() : null),
+                receiverAccount != null ? receiverAccount.getAccountType() : null,
                 settlementTransaction.getSenderAccount(),
                 settlementTransaction.getBeneficiaryAccount(),
                 settlementTransaction.getSettlementAccount(),
                 settlementTransaction.getAmount(),
                 resolveHistoryStatus(settlementTransaction.getTransactionType()),
                 settlementTransaction.getPacs008MessageId(),
+                pacs008 != null ? pacs008.getUetr() : null,
                 settlementTransaction.getPacs002Status(),
                 settlementTransaction.getCreatedAt(),
+                settlementTransaction.getCreatedAt(),
                 settlementTransaction.getUpdatedAt());
+    }
+
+    private SettlementResponseContext buildResponseContext(List<SettlementTransaction> settlementTransactions) {
+        if (settlementTransactions == null || settlementTransactions.isEmpty()) {
+            return new SettlementResponseContext(Map.of(), Map.of());
+        }
+
+        Set<Long> paymentIds = settlementTransactions.stream()
+                .map(SettlementTransaction::getPaymentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, PACS008> pacs008ByTransactionId = paymentIds.isEmpty()
+                ? Map.of()
+                : pacs008Repository.findByTransactionIdIn(paymentIds).stream()
+                .collect(Collectors.toMap(
+                        PACS008::getTransactionId,
+                        Function.identity(),
+                        this::newerPacs008));
+
+        Set<String> accountNumbers = settlementTransactions.stream()
+                .flatMap(settlementTransaction -> Stream.of(
+                        settlementTransaction.getSenderAccount(),
+                        settlementTransaction.getBeneficiaryAccount()))
+                .filter(accountNumber -> accountNumber != null && !accountNumber.isBlank())
+                .collect(Collectors.toSet());
+        Map<String, Account> accountsByNumber = accountNumbers.isEmpty()
+                ? Map.of()
+                : accountRepository.findByAccountNumberIn(accountNumbers).stream()
+                .collect(Collectors.toMap(Account::getAccountNumber, Function.identity(), (existing, duplicate) -> existing));
+
+        return new SettlementResponseContext(pacs008ByTransactionId, accountsByNumber);
+    }
+
+    private PACS008 newerPacs008(PACS008 existing, PACS008 candidate) {
+        if (existing.getCreatedDate() == null) {
+            return candidate;
+        }
+        if (candidate.getCreatedDate() == null) {
+            return existing;
+        }
+        return candidate.getCreatedDate().isAfter(existing.getCreatedDate()) ? candidate : existing;
+    }
+
+    private record SettlementResponseContext(
+            Map<Long, PACS008> pacs008ByTransactionId,
+            Map<String, Account> accountsByNumber) {
     }
 
     private String resolveHistoryAccountNumber(SettlementTransaction settlementTransaction) {
@@ -485,8 +573,9 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
 
     private String resolveHistoryStatus(SettlementTransactionType transactionType) {
         return switch (transactionType) {
-            case DEBIT_TO_SETTLEMENT -> "Credited To Settlement";
-            case CREDIT_TO_BENEFICIARY, RETURN_TO_SENDER -> "Debited From Settlement";
+            case DEBIT_TO_SETTLEMENT -> "Credited";
+            case CREDIT_TO_BENEFICIARY -> "Debited";
+            case RETURN_TO_SENDER -> "Returned";
         };
     }
 
@@ -529,13 +618,14 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
 
     private List<SettlementTransactionType> parseHistoryStatusTypes(String status) {
         String normalized = normalizeHistoryStatus(status);
-        if ("credited to settlement".equals(normalized)) {
+        if ("credited".equals(normalized) || "credited to settlement".equals(normalized)) {
             return List.of(SettlementTransactionType.DEBIT_TO_SETTLEMENT);
         }
-        if ("debited from settlement".equals(normalized)) {
-            return List.of(
-                    SettlementTransactionType.CREDIT_TO_BENEFICIARY,
-                    SettlementTransactionType.RETURN_TO_SENDER);
+        if ("debited".equals(normalized) || "debited from settlement".equals(normalized)) {
+            return List.of(SettlementTransactionType.CREDIT_TO_BENEFICIARY);
+        }
+        if ("returned".equals(normalized)) {
+            return List.of(SettlementTransactionType.RETURN_TO_SENDER);
         }
         return List.of();
     }
@@ -575,5 +665,21 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PACS002 status is required");
         }
         return status.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private BigDecimal nullToZero(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 }

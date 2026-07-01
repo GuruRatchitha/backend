@@ -86,6 +86,9 @@ public class EmployeeSettlementController {
         if (property.isBlank()) {
             throw new ResponseStatusException(BAD_REQUEST, "sort property is required");
         }
+        if ("dateTime".equalsIgnoreCase(property)) {
+            property = "createdAt";
+        }
 
         Sort.Direction direction = Sort.Direction.DESC;
         if (parts.length > 1 && !parts[1].isBlank()) {

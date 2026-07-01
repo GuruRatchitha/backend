@@ -1,7 +1,6 @@
 package com.bank.fedwire.service;
 
 import com.bank.fedwire.dto.AccountStatisticsResponse;
-import com.bank.fedwire.dto.DashboardSettlementTransactionResponse;
 import com.bank.fedwire.dto.DashboardSummaryResponse;
 import com.bank.fedwire.dto.PendingBeneficiaryResponse;
 import com.bank.fedwire.dto.PendingTransactionResponse;
@@ -124,7 +123,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<DashboardSettlementTransactionResponse> getRecentSettlementTransactions(Long employeeUserId) {
+    public List<SettlementTransactionResponse> getRecentSettlementTransactions(Long employeeUserId) {
         requireEmployee(employeeUserId);
         return settlementTransactionService.getSettlementTransactions(
                         null,
@@ -132,10 +131,7 @@ public class DashboardServiceImpl implements DashboardService {
                         null,
                         null,
                         latestFiveSettlementTransactions())
-                .getContent()
-                .stream()
-                .map(this::toDashboardSettlementTransactionResponse)
-                .toList();
+                .getContent();
     }
 
     private void requireEmployee(Long employeeUserId) {
@@ -161,16 +157,6 @@ public class DashboardServiceImpl implements DashboardService {
                 Sort.Order.desc("createdAt"),
                 Sort.Order.desc("settlementTransactionId"));
         return PageRequest.of(0, DASHBOARD_LIMIT, sort);
-    }
-
-    private DashboardSettlementTransactionResponse toDashboardSettlementTransactionResponse(
-            SettlementTransactionResponse transaction) {
-        return new DashboardSettlementTransactionResponse(
-                transaction.paymentId(),
-                transaction.accountNumber(),
-                transaction.amount(),
-                transaction.status(),
-                transaction.createdAt());
     }
 
     private BigDecimal nullToZero(BigDecimal value) {
