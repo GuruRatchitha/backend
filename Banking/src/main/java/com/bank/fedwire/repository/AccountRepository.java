@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,8 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     List<Account> findByUserUserId(Long userId);
 
     Optional<Account> findByAccountNumber(String accountNumber);
+
+    List<Account> findByAccountNumberIn(Collection<String> accountNumbers);
 
     Optional<Account> findByAccountNameAndUserIsNull(String accountName);
 

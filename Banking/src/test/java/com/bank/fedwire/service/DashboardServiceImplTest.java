@@ -151,14 +151,21 @@ class DashboardServiceImplTest {
                 7001L,
                 "111111111",
                 "111111111",
+                "Sender Name",
+                "SAVINGS",
                 "222222222",
+                "222222222",
+                "Receiver Name",
+                "CURRENT",
                 "111111111",
                 "222222222",
                 "999900001",
                 new BigDecimal("250.00"),
-                "Credited To Settlement",
+                "Credited",
                 "PACS008-7001",
+                "11111111-2222-3333-4444-555555555555",
                 null,
+                createdAt,
                 createdAt,
                 createdAt);
 
@@ -173,10 +180,16 @@ class DashboardServiceImplTest {
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).paymentId()).isEqualTo(7001L);
-        assertThat(response.get(0).accountNumber()).isEqualTo("111111111");
+        assertThat(response.get(0).senderAccountNumber()).isEqualTo("111111111");
+        assertThat(response.get(0).senderName()).isEqualTo("Sender Name");
+        assertThat(response.get(0).senderAccountType()).isEqualTo("SAVINGS");
+        assertThat(response.get(0).receiverAccountNumber()).isEqualTo("222222222");
+        assertThat(response.get(0).receiverName()).isEqualTo("Receiver Name");
+        assertThat(response.get(0).receiverAccountType()).isEqualTo("CURRENT");
+        assertThat(response.get(0).dateTime()).isEqualTo(createdAt);
+        assertThat(response.get(0).uetr()).isEqualTo("11111111-2222-3333-4444-555555555555");
         assertThat(response.get(0).amount()).isEqualByComparingTo("250.00");
-        assertThat(response.get(0).status()).isEqualTo("Credited To Settlement");
-        assertThat(response.get(0).createdDate()).isEqualTo(createdAt);
+        assertThat(response.get(0).status()).isEqualTo("Credited");
 
         verify(settlementTransactionService).getSettlementTransactions(
                 isNull(),
