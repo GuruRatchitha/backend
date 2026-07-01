@@ -29,6 +29,9 @@ class Admi002ListenerServiceTest {
     private Admi002ProcessingService admi002ProcessingService;
 
     @Mock
+    private Pacs002ProcessingService pacs002ProcessingService;
+
+    @Mock
     private InboundSqsMessageSupport inboundSqsMessageSupport;
 
     @InjectMocks
@@ -56,6 +59,32 @@ class Admi002ListenerServiceTest {
         admi002ListenerService.pollQueue();
 
         verify(admi002ProcessingService).process(xml);
+        verify(sqsClient).deleteMessage(any(DeleteMessageRequest.class));
+    }
+
+    @Test
+    void pollQueueRoutesPacs002MessagesToPacsProcessor() {
+        String queueUrl = "https://sqs.us-east-2.amazonaws.com/123456789012/admi002";
+        String xml = "<Envelope><AppHdr><MsgDefIdr>pacs.002.001.10</MsgDefIdr><BizMsgIdr>MSG-2</BizMsgIdr></AppHdr>"
+                + "<Document><transaction_status>ACCP</transaction_status></Document></Envelope>";
+
+        when(awsProperties.getAdmi002QueueUrl()).thenReturn(queueUrl);
+        when(sqsClient.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
+                .messages(Message.builder()
+                        .messageId("msg-2")
+                        .receiptHandle("receipt-2")
+                        .body(xml)
+                        .build())
+                .build());
+        when(inboundSqsMessageSupport.extractXmlPayload(xml)).thenReturn(xml);
+        when(inboundSqsMessageSupport.extractMetadata(xml)).thenReturn(
+                new InboundSqsMessageSupport.InboundMessageMetadata("pacs.002.001.10", "MSG-2"));
+        when(inboundSqsMessageSupport.isAdmi002("pacs.002.001.10")).thenReturn(false);
+        when(inboundSqsMessageSupport.isPacs002("pacs.002.001.10")).thenReturn(true);
+
+        admi002ListenerService.pollQueue();
+
+        verify(pacs002ProcessingService).process(xml);
         verify(sqsClient).deleteMessage(any(DeleteMessageRequest.class));
     }
 }

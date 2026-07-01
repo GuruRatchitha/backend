@@ -40,6 +40,7 @@ public class CustomerUpdateRequest {
 
     private String address;
 
+    @Size(max = 35, message = "Town name must be 35 characters or less.")
     private String townName;
 
     @Size(min = 2, max = 2, message = "Country code must be exactly 2 characters.")

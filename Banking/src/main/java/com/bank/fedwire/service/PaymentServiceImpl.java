@@ -32,6 +32,7 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +43,10 @@ public class PaymentServiceImpl implements PaymentService {
     private static final String TRANSACTION_TYPE = "DEBIT";
     private static final String CHARGE_BEARER = "DEBT";
     private static final String LOCAL_INSTRUMENT = "CTRC";
+    private static final String DEFAULT_TOWN_NAME = "Unknown";
+    private static final String DEFAULT_COUNTRY_CODE = "US";
+    private static final int MAX_PARTY_NAME_LENGTH = 140;
+    private static final int MAX_TOWN_NAME_LENGTH = 35;
 
     private final BeneficiaryRepository beneficiaryRepository;
     private final AccountRepository accountRepository;
@@ -65,12 +70,6 @@ public class PaymentServiceImpl implements PaymentService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sender not found"));
         Account senderAccount = selectSenderAccount(userId);
         String pendingPaymentKey = createPendingPaymentKey(userId, beneficiary.getBeneficiaryId());
-        PaymentResponse existingPayment = transactionRepository.findByPendingPaymentKey(pendingPaymentKey)
-                .map(this::toPaymentResponse)
-                .orElse(null);
-        if (existingPayment != null) {
-            return existingPayment;
-        }
 
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
 
@@ -117,15 +116,15 @@ public class PaymentServiceImpl implements PaymentService {
                 .bankTransactionId(bankTransactionId)
                 .amount(request.getAmount())
                 .currency(resolveCurrency(senderAccount))
-                .debtorName(requireSnapshotValue(sender.getUserName(), "Sender name is required"))
+                .debtorName(requireSnapshotValue(sender.getUserName(), "Sender name is required", MAX_PARTY_NAME_LENGTH))
                 .debtorAccount(requireSnapshotValue(senderAccount.getAccountNumber(), "Sender account number is required"))
-                .debtorTown(requireSnapshotValue(sender.getTownName(), "Sender town name is required"))
+                .debtorTown(snapshotValueOrDefault(sender.getTownName(), DEFAULT_TOWN_NAME, MAX_TOWN_NAME_LENGTH))
                 .debtorCountry(normalizeCountry(sender.getCountryCode()))
-                .creditorName(requireSnapshotValue(beneficiary.getBeneficiaryName(), "Beneficiary name is required"))
+                .creditorName(requireSnapshotValue(beneficiary.getBeneficiaryName(), "Beneficiary name is required", MAX_PARTY_NAME_LENGTH))
                 // TEMPORARY FOR PAYAPT ADM.002 TESTING
                 .creditorAccount(requireRawSnapshotValue(beneficiary.getAccountNumber(), "Beneficiary account number is required"))
                 // END TEMPORARY
-                .creditorTown(requireSnapshotValue(beneficiary.getTownName(), "Beneficiary town name is required"))
+                .creditorTown(snapshotValueOrDefault(beneficiary.getTownName(), DEFAULT_TOWN_NAME, MAX_TOWN_NAME_LENGTH))
                 .creditorCountry(normalizeCountry(beneficiary.getCountryCode()))
                 .settlementDate(now.toLocalDate())
                 .acceptanceDatetime(now)
@@ -221,18 +220,40 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private String normalizeCountry(String countryCode) {
-        String country = requireSnapshotValue(countryCode, "Country code is required");
-        return country.trim().toUpperCase(Locale.ROOT);
+        String country = snapshotValueOrDefault(countryCode, DEFAULT_COUNTRY_CODE).toUpperCase(Locale.ROOT);
+        if (country.length() == 2) {
+            return country;
+        }
+        if ("USA".equals(country) || "UNITED STATES".equals(country) || "UNITED STATES OF AMERICA".equals(country)) {
+            return "US";
+        }
+        if ("INDIA".equals(country)) {
+            return "IN";
+        }
+        return DEFAULT_COUNTRY_CODE;
     }
 
     private String createPendingPaymentKey(Long userId, Long beneficiaryId) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] value = digest.digest((userId + ":" + beneficiaryId).getBytes(StandardCharsets.UTF_8));
+            String source = userId + ":" + beneficiaryId + ":" + UUID.randomUUID();
+            byte[] value = digest.digest(source.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(value);
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 algorithm is not available", ex);
         }
+    }
+
+    private String snapshotValueOrDefault(String value, String defaultValue) {
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        return value.trim();
+    }
+
+    private String snapshotValueOrDefault(String value, String defaultValue, int maxLength) {
+        String snapshotValue = snapshotValueOrDefault(value, defaultValue);
+        return snapshotValue.length() <= maxLength ? snapshotValue : snapshotValue.substring(0, maxLength);
     }
 
     private String requireSnapshotValue(String value, String message) {
@@ -240,6 +261,11 @@ public class PaymentServiceImpl implements PaymentService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         }
         return value.trim();
+    }
+
+    private String requireSnapshotValue(String value, String message, int maxLength) {
+        String snapshotValue = requireSnapshotValue(value, message);
+        return snapshotValue.length() <= maxLength ? snapshotValue : snapshotValue.substring(0, maxLength);
     }
 
     // TEMPORARY FOR PAYAPT ADM.002 TESTING

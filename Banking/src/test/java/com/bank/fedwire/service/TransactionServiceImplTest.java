@@ -165,6 +165,7 @@ class TransactionServiceImplTest {
         assertNull(response.getPacs002Reason());
         assertNull(response.getAdmi002Reason());
         assertEquals("db-uetr", response.getUetr());
+        assertEquals("db-uetr", response.getPaymentDetails().getUetr());
         assertEquals(LocalDateTime.of(2026, 6, 30, 10, 0), response.getPaymentTimestamp());
     }
 
@@ -217,6 +218,8 @@ class TransactionServiceImplTest {
 
         assertEquals("Creditor or Instructed or Receiving routing number is not found.",
                 response.getPacs002Reason());
+        assertEquals("Creditor or Instructed or Receiving routing number is not found.",
+                response.getRejectionReason());
         assertNull(response.getAdmi002Reason());
     }
 

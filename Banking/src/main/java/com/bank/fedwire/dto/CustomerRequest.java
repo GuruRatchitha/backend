@@ -51,6 +51,7 @@ public class CustomerRequest {
     private String address;
 
     @NotBlank(message = "Town name is required.")
+    @Size(max = 35, message = "Town name must be 35 characters or less.")
     private String townName;
 
     @JsonAlias("account_type")

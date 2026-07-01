@@ -39,15 +39,13 @@ public class SnsPublisherService {
         }
 
         if (snsClient.isEmpty()) {
-            log.warn("AWS messaging is enabled but no SNS client is available; skipping SNS publish for transactionId={}",
-                    transactionId);
-            return;
+            throw new IllegalStateException(
+                    "AWS messaging is enabled but no SNS client is available for transactionId=" + transactionId);
         }
 
         if (awsProperties.getTopicArn() == null || awsProperties.getTopicArn().isBlank()) {
-            log.warn("AWS messaging is enabled but aws.topic-arn is not configured; skipping SNS publish for transactionId={}",
-                    transactionId);
-            return;
+            throw new IllegalStateException(
+                    "AWS messaging is enabled but aws.topic-arn is not configured for transactionId=" + transactionId);
         }
 
         PACS008 pacs008 = pacs008Repository.findByTransactionIdForUpdate(transactionId)

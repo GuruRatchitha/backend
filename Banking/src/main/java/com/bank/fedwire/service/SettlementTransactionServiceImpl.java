@@ -12,6 +12,7 @@ import com.bank.fedwire.entity.SettlementTransactionStatus;
 import com.bank.fedwire.entity.SettlementTransactionType;
 import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.entity.TransactionStatus;
+import com.bank.fedwire.event.Pacs008ApprovedEvent;
 import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.MessageHeaderRepository;
@@ -20,6 +21,7 @@ import com.bank.fedwire.repository.SettlementTransactionRepository;
 import com.bank.fedwire.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -67,7 +69,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
     private final SettlementTransactionRepository settlementTransactionRepository;
     private final TransactionRepository transactionRepository;
     private final Pacs008XmlGeneratorService pacs008XmlGeneratorService;
-    private final SnsPublisherService snsPublisherService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -162,7 +164,6 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         BigDecimal amount = requireAmount(lockedTransaction.getAmount());
 
         pacs008XmlGeneratorService.generateXml(lockedTransaction.getTransactionId());
-        snsPublisherService.publishIfNeeded(lockedTransaction.getTransactionId());
 
         boolean alreadyDebited = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
                 lockedTransaction.getTransactionId(),
@@ -203,6 +204,7 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         transactionRepository.saveAndFlush(lockedTransaction);
         messageHeader.setMessageStatus(STATUS_PROCESSING);
         messageHeaderRepository.saveAndFlush(messageHeader);
+        eventPublisher.publishEvent(new Pacs008ApprovedEvent(lockedTransaction.getTransactionId()));
 
         log.info("Approved paymentId={} and moved funds to settlement account {}", lockedTransaction.getTransactionId(),
                 settlementAccount.getAccountNumber());

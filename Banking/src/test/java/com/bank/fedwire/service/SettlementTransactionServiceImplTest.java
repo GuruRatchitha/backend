@@ -26,6 +26,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -66,7 +67,7 @@ class SettlementTransactionServiceImplTest {
     private Pacs008XmlGeneratorService pacs008XmlGeneratorService;
 
     @Mock
-    private SnsPublisherService snsPublisherService;
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private SettlementTransactionServiceImpl settlementTransactionService;

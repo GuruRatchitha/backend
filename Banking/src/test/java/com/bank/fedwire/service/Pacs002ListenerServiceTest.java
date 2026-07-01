@@ -31,6 +31,9 @@ class Pacs002ListenerServiceTest {
     private Pacs002ProcessingService pacs002ProcessingService;
 
     @Mock
+    private Admi002ProcessingService admi002ProcessingService;
+
+    @Mock
     private InboundSqsMessageSupport inboundSqsMessageSupport;
 
     @InjectMocks
@@ -66,7 +69,7 @@ class Pacs002ListenerServiceTest {
     }
 
     @Test
-    void pollQueueIgnoresNonPacs002Messages() {
+    void pollQueueRoutesAdmi002MessagesToAdmiProcessor() {
         String queueUrl = "https://sqs.us-east-2.amazonaws.com/123456789012/pacs002";
         String xml = "<Envelope><AppHdr><MsgDefIdr>admi.002.001.01</MsgDefIdr><BizMsgIdr>MSG-9</BizMsgIdr></AppHdr>"
                 + "<Document><RltdRef><Ref>TRF-123</Ref></RltdRef></Document></Envelope>";
@@ -83,10 +86,12 @@ class Pacs002ListenerServiceTest {
         when(inboundSqsMessageSupport.extractMetadata(xml)).thenReturn(
                 new InboundSqsMessageSupport.InboundMessageMetadata("admi.002.001.01", "MSG-9"));
         when(inboundSqsMessageSupport.isPacs002("admi.002.001.01")).thenReturn(false);
+        when(inboundSqsMessageSupport.isAdmi002("admi.002.001.01")).thenReturn(true);
 
         pacs002ListenerService.pollQueue();
 
         verify(pacs002ProcessingService, org.mockito.Mockito.never()).process(xml);
-        verify(sqsClient, org.mockito.Mockito.never()).deleteMessage(any(DeleteMessageRequest.class));
+        verify(admi002ProcessingService).process(xml);
+        verify(sqsClient).deleteMessage(any(DeleteMessageRequest.class));
     }
 }

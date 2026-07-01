@@ -97,6 +97,7 @@ public class TransactionDetailResponse {
     @Builder
     public static class PaymentDetails {
         private String transactionReference;
+        private String uetr;
         private BigDecimal amount;
         private LocalDateTime paymentDate;
         private String status;

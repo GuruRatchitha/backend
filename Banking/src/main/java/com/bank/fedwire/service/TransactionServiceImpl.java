@@ -297,7 +297,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .or(() -> extractXmlText(pacs008Xml, "UETR"))
                 .orElse(null);
         String rejectionReason = latestAdmi002.map(this::admi002RejectionReason)
-                .or(() -> latestPacs002.map(this::pacs002RejectionReason))
+                .or(() -> latestPacs002.map(pacs002 -> pacs002RejectionReason(pacs002, pacs002Xml)))
                 .filter(reason -> reason != null && !reason.isBlank())
                 .orElse(null);
         boolean processCompleted = STATUS_COMPLETED.equalsIgnoreCase(transactionStatus)
@@ -341,6 +341,7 @@ public class TransactionServiceImpl implements TransactionService {
                         .build())
                 .paymentDetails(TransactionDetailResponse.PaymentDetails.builder()
                         .transactionReference(String.valueOf(currentTransaction.getTransactionId()))
+                        .uetr(uetr)
                         .amount(currentTransaction.getAmount())
                         .paymentDate(currentTransaction.getTransactionDateTime())
                         .status(currentTransaction.getTransactionStatus())
@@ -385,11 +386,11 @@ public class TransactionServiceImpl implements TransactionService {
                 || STATUS_SUCCESS.equalsIgnoreCase(status);
     }
 
-    private String pacs002RejectionReason(PACS002 pacs002) {
+    private String pacs002RejectionReason(PACS002 pacs002, String pacs002Xml) {
         if (pacs002 == null || !"RJCT".equalsIgnoreCase(pacs002.getTransactionStatus())) {
             return null;
         }
-        return pacs002.getReasonCode();
+        return extractXmlText(pacs002Xml, "AddtlInf").orElse(null);
     }
 
     private String resolvePacs002Reason(PACS002 pacs002, String pacs002Xml, String transactionStatus) {

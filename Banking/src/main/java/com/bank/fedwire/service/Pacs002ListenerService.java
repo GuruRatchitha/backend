@@ -27,6 +27,7 @@ public class Pacs002ListenerService {
     private final SqsClient sqsClient;
     private final AwsProperties awsProperties;
     private final Pacs002ProcessingService pacs002ProcessingService;
+    private final Admi002ProcessingService admi002ProcessingService;
     private final InboundSqsMessageSupport inboundSqsMessageSupport;
 
     @PostConstruct
@@ -102,6 +103,10 @@ public class Pacs002ListenerService {
             if (inboundSqsMessageSupport.isPacs002(metadata.messageType())) {
                 pacs002ProcessingService.process(payload);
                 log.info("SQS message processed queueUrl={}, messageId={}, messageType={}, processingResult=PROCESSED",
+                        queueUrl, message.messageId(), metadata.messageType());
+            } else if (inboundSqsMessageSupport.isAdmi002(metadata.messageType())) {
+                admi002ProcessingService.process(payload);
+                log.info("SQS message processed queueUrl={}, messageId={}, messageType={}, processingResult=PROCESSED_BY_ADMI002_ROUTE",
                         queueUrl, message.messageId(), metadata.messageType());
             } else {
                 log.warn("Unsupported inbound message queueUrl={}, messageId={}, messageType={}, processingResult=UNSUPPORTED",

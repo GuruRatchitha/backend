@@ -27,6 +27,7 @@ public class Admi002ListenerService {
     private final SqsClient sqsClient;
     private final AwsProperties awsProperties;
     private final Admi002ProcessingService admi002ProcessingService;
+    private final Pacs002ProcessingService pacs002ProcessingService;
     private final InboundSqsMessageSupport inboundSqsMessageSupport;
 
     @PostConstruct
@@ -87,15 +88,19 @@ public class Admi002ListenerService {
         try {
             log.info("Received ADMI002 SQS message queueUrl={}, sqsMessageId={}, messageType={}, businessMessageId={}, rawBody={}",
                     queueUrl, message.messageId(), metadata.messageType(), metadata.businessMessageId(), rawBody);
-            if (!inboundSqsMessageSupport.isAdmi002(metadata.messageType())) {
+            if (inboundSqsMessageSupport.isAdmi002(metadata.messageType())) {
+                admi002ProcessingService.process(payload);
+                log.info("ADMI002 processing completed queueUrl={}, sqsMessageId={}, messageType={}",
+                        queueUrl, message.messageId(), metadata.messageType());
+            } else if (inboundSqsMessageSupport.isPacs002(metadata.messageType())) {
+                pacs002ProcessingService.process(payload);
+                log.info("PACS002 processing completed from ADMI002 listener queueUrl={}, sqsMessageId={}, messageType={}",
+                        queueUrl, message.messageId(), metadata.messageType());
+            } else {
                 log.warn("Unsupported ADMI002 queue message queueUrl={}, sqsMessageId={}, messageType={}, processingResult=UNSUPPORTED",
                         queueUrl, message.messageId(), metadata.messageType());
                 return;
             }
-
-            admi002ProcessingService.process(payload);
-            log.info("ADMI002 processing completed queueUrl={}, sqsMessageId={}, messageType={}",
-                    queueUrl, message.messageId(), metadata.messageType());
 
             sqsClient.deleteMessage(DeleteMessageRequest.builder()
                     .queueUrl(queueUrl)
