@@ -147,7 +147,9 @@ class SettlementTransactionServiceImplTest {
                         .creditorName("Receiver Name")
                         .build()));
         when(accountRepository.findByAccountNumberIn(argThat(accountNumbers ->
-                accountNumbers.contains("111111111") && accountNumbers.contains("222222222"))))
+                accountNumbers.contains("111111111")
+                        && accountNumbers.contains("222222222")
+                        && accountNumbers.contains("999900001"))))
                 .thenReturn(List.of(
                         Account.builder()
                                 .accountNumber("111111111")
@@ -158,6 +160,11 @@ class SettlementTransactionServiceImplTest {
                                 .accountNumber("222222222")
                                 .accountName("Receiver Name")
                                 .accountType("CURRENT")
+                                .build(),
+                        Account.builder()
+                                .accountNumber("999900001")
+                                .accountName("ABC Settlement Account")
+                                .accountType("SETTLEMENT")
                                 .build()));
 
         Page<SettlementTransactionResponse> response = settlementTransactionService.getSettlementTransactions(
@@ -174,9 +181,15 @@ class SettlementTransactionServiceImplTest {
         assertEquals("Sender Name", creditedResponse.senderName());
         assertEquals("SAVINGS", creditedResponse.senderAccountType());
         assertEquals("222222222", creditedResponse.beneficiaryAccountNumber());
-        assertEquals("222222222", creditedResponse.receiverAccountNumber());
-        assertEquals("Receiver Name", creditedResponse.receiverName());
-        assertEquals("CURRENT", creditedResponse.receiverAccountType());
+        assertEquals("999900001", creditedResponse.receiverAccountNumber());
+        assertEquals("Settlement Account", creditedResponse.receiverName());
+        assertEquals("SETTLEMENT", creditedResponse.receiverAccountType());
+        assertEquals("111111111", creditedResponse.senderDisplay().accountNumber());
+        assertEquals("Sender Name", creditedResponse.senderDisplay().name());
+        assertEquals("SAVINGS", creditedResponse.senderDisplay().accountType());
+        assertEquals("999900001", creditedResponse.receiverDisplay().accountNumber());
+        assertEquals("Settlement Account", creditedResponse.receiverDisplay().name());
+        assertEquals("SETTLEMENT", creditedResponse.receiverDisplay().accountType());
         assertEquals("11111111-2222-3333-4444-555555555555", creditedResponse.uetr());
         assertEquals(LocalDateTime.of(2026, 6, 30, 10, 0), creditedResponse.dateTime());
         assertEquals(new BigDecimal("125.00"), creditedResponse.amount());
@@ -186,8 +199,17 @@ class SettlementTransactionServiceImplTest {
         SettlementTransactionResponse beneficiaryResponse = response.getContent().get(1);
         assertEquals(7001L, beneficiaryResponse.paymentId());
         assertEquals("222222222", beneficiaryResponse.accountNumber());
-        assertEquals("111111111", beneficiaryResponse.senderAccountNumber());
+        assertEquals("999900001", beneficiaryResponse.senderAccountNumber());
+        assertEquals("Settlement Account", beneficiaryResponse.senderName());
+        assertEquals("SETTLEMENT", beneficiaryResponse.senderAccountType());
         assertEquals("222222222", beneficiaryResponse.beneficiaryAccountNumber());
+        assertEquals("222222222", beneficiaryResponse.receiverAccountNumber());
+        assertEquals("Receiver Name", beneficiaryResponse.receiverName());
+        assertEquals("CURRENT", beneficiaryResponse.receiverAccountType());
+        assertEquals("999900001", beneficiaryResponse.senderDisplay().accountNumber());
+        assertEquals("Settlement Account", beneficiaryResponse.senderDisplay().name());
+        assertEquals("222222222", beneficiaryResponse.receiverDisplay().accountNumber());
+        assertEquals("Receiver Name", beneficiaryResponse.receiverDisplay().name());
         assertEquals(new BigDecimal("-125.00"), beneficiaryResponse.amount());
         assertEquals("Debited", beneficiaryResponse.status());
         assertFalse(beneficiaryResponse.status().contains("Amount"));
@@ -195,8 +217,17 @@ class SettlementTransactionServiceImplTest {
         SettlementTransactionResponse returnedResponse = response.getContent().get(2);
         assertEquals(7001L, returnedResponse.paymentId());
         assertEquals("111111111", returnedResponse.accountNumber());
-        assertEquals("111111111", returnedResponse.senderAccountNumber());
+        assertEquals("999900001", returnedResponse.senderAccountNumber());
+        assertEquals("Settlement Account", returnedResponse.senderName());
+        assertEquals("SETTLEMENT", returnedResponse.senderAccountType());
         assertEquals("222222222", returnedResponse.beneficiaryAccountNumber());
+        assertEquals("111111111", returnedResponse.receiverAccountNumber());
+        assertEquals("Sender Name", returnedResponse.receiverName());
+        assertEquals("SAVINGS", returnedResponse.receiverAccountType());
+        assertEquals("999900001", returnedResponse.senderDisplay().accountNumber());
+        assertEquals("Settlement Account", returnedResponse.senderDisplay().name());
+        assertEquals("111111111", returnedResponse.receiverDisplay().accountNumber());
+        assertEquals("Sender Name", returnedResponse.receiverDisplay().name());
         assertEquals(new BigDecimal("-125.00"), returnedResponse.amount());
         assertEquals("Returned", returnedResponse.status());
         assertFalse(returnedResponse.status().contains("Amount"));

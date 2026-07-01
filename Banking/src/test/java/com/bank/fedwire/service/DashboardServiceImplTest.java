@@ -167,7 +167,15 @@ class DashboardServiceImplTest {
                 null,
                 createdAt,
                 createdAt,
-                createdAt);
+                createdAt,
+                new SettlementTransactionResponse.LedgerPartyDisplay(
+                        "111111111",
+                        "Sender Name",
+                        "SAVINGS"),
+                new SettlementTransactionResponse.LedgerPartyDisplay(
+                        "222222222",
+                        "Receiver Name",
+                        "CURRENT"));
 
         when(settlementTransactionService.getSettlementTransactions(
                 isNull(),

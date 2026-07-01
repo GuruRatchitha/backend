@@ -52,6 +52,7 @@ import jakarta.persistence.criteria.Predicate;
 public class SettlementTransactionServiceImpl implements SettlementTransactionService {
 
     private static final String SETTLEMENT_ACCOUNT_TYPE = "SETTLEMENT";
+    private static final String SETTLEMENT_ACCOUNT_DISPLAY_NAME = "Settlement Account";
     private static final String STATUS_APPROVED = TransactionStatus.APPROVED.name();
     private static final String STATUS_PROCESSING = TransactionStatus.PROCESSING.name();
     private static final String STATUS_WAITING = TransactionStatus.WAITING_FOR_PACS002.name();
@@ -496,21 +497,30 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         PACS008 pacs008 = responseContext.pacs008ByTransactionId().get(settlementTransaction.getPaymentId());
         Account senderAccount = responseContext.accountsByNumber().get(settlementTransaction.getSenderAccount());
         Account receiverAccount = responseContext.accountsByNumber().get(settlementTransaction.getBeneficiaryAccount());
+        Account settlementAccount = responseContext.accountsByNumber().get(settlementTransaction.getSettlementAccount());
+        SettlementTransactionResponse.LedgerPartyDisplay senderDisplay = resolveSenderDisplay(
+                settlementTransaction,
+                senderAccount,
+                settlementAccount,
+                pacs008);
+        SettlementTransactionResponse.LedgerPartyDisplay receiverDisplay = resolveReceiverDisplay(
+                settlementTransaction,
+                senderAccount,
+                receiverAccount,
+                settlementAccount,
+                pacs008);
 
         return new SettlementTransactionResponse(
                 settlementTransaction.getSettlementTransactionId(),
                 settlementTransaction.getPaymentId(),
                 resolveHistoryAccountNumber(settlementTransaction),
-                settlementTransaction.getSenderAccount(),
-                firstNonBlank(senderAccount != null ? senderAccount.getAccountName() : null,
-                        pacs008 != null ? pacs008.getDebtorName() : null),
-                senderAccount != null ? senderAccount.getAccountType() : null,
+                senderDisplay.accountNumber(),
+                senderDisplay.name(),
+                senderDisplay.accountType(),
                 settlementTransaction.getBeneficiaryAccount(),
-                settlementTransaction.getBeneficiaryAccount(),
-                firstNonBlank(
-                        receiverAccount != null ? receiverAccount.getAccountName() : null,
-                        pacs008 != null ? pacs008.getCreditorName() : null),
-                receiverAccount != null ? receiverAccount.getAccountType() : null,
+                receiverDisplay.accountNumber(),
+                receiverDisplay.name(),
+                receiverDisplay.accountType(),
                 settlementTransaction.getSenderAccount(),
                 settlementTransaction.getBeneficiaryAccount(),
                 settlementTransaction.getSettlementAccount(),
@@ -521,7 +531,9 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
                 settlementTransaction.getPacs002Status(),
                 settlementTransaction.getCreatedAt(),
                 settlementTransaction.getCreatedAt(),
-                settlementTransaction.getUpdatedAt());
+                settlementTransaction.getUpdatedAt(),
+                senderDisplay,
+                receiverDisplay);
     }
 
     private SettlementResponseContext buildResponseContext(List<SettlementTransaction> settlementTransactions) {
@@ -544,7 +556,8 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
         Set<String> accountNumbers = settlementTransactions.stream()
                 .flatMap(settlementTransaction -> Stream.of(
                         settlementTransaction.getSenderAccount(),
-                        settlementTransaction.getBeneficiaryAccount()))
+                        settlementTransaction.getBeneficiaryAccount(),
+                        settlementTransaction.getSettlementAccount()))
                 .filter(accountNumber -> accountNumber != null && !accountNumber.isBlank())
                 .collect(Collectors.toSet());
         Map<String, Account> accountsByNumber = accountNumbers.isEmpty()
@@ -568,6 +581,62 @@ public class SettlementTransactionServiceImpl implements SettlementTransactionSe
     private record SettlementResponseContext(
             Map<Long, PACS008> pacs008ByTransactionId,
             Map<String, Account> accountsByNumber) {
+    }
+
+    private SettlementTransactionResponse.LedgerPartyDisplay resolveSenderDisplay(
+            SettlementTransaction settlementTransaction,
+            Account senderAccount,
+            Account settlementAccount,
+            PACS008 pacs008) {
+        return switch (settlementTransaction.getTransactionType()) {
+            case DEBIT_TO_SETTLEMENT -> accountDisplay(
+                    settlementTransaction.getSenderAccount(),
+                    senderAccount,
+                    pacs008 != null ? pacs008.getDebtorName() : null);
+            case CREDIT_TO_BENEFICIARY, RETURN_TO_SENDER -> settlementDisplay(
+                    settlementTransaction.getSettlementAccount(),
+                    settlementAccount);
+        };
+    }
+
+    private SettlementTransactionResponse.LedgerPartyDisplay resolveReceiverDisplay(
+            SettlementTransaction settlementTransaction,
+            Account senderAccount,
+            Account receiverAccount,
+            Account settlementAccount,
+            PACS008 pacs008) {
+        return switch (settlementTransaction.getTransactionType()) {
+            case DEBIT_TO_SETTLEMENT -> settlementDisplay(
+                    settlementTransaction.getSettlementAccount(),
+                    settlementAccount);
+            case CREDIT_TO_BENEFICIARY -> accountDisplay(
+                    settlementTransaction.getBeneficiaryAccount(),
+                    receiverAccount,
+                    pacs008 != null ? pacs008.getCreditorName() : null);
+            case RETURN_TO_SENDER -> accountDisplay(
+                    settlementTransaction.getSenderAccount(),
+                    senderAccount,
+                    pacs008 != null ? pacs008.getDebtorName() : null);
+        };
+    }
+
+    private SettlementTransactionResponse.LedgerPartyDisplay accountDisplay(
+            String accountNumber,
+            Account account,
+            String fallbackName) {
+        return new SettlementTransactionResponse.LedgerPartyDisplay(
+                accountNumber,
+                firstNonBlank(account != null ? account.getAccountName() : null, fallbackName),
+                account != null ? account.getAccountType() : null);
+    }
+
+    private SettlementTransactionResponse.LedgerPartyDisplay settlementDisplay(
+            String accountNumber,
+            Account settlementAccount) {
+        return new SettlementTransactionResponse.LedgerPartyDisplay(
+                accountNumber,
+                SETTLEMENT_ACCOUNT_DISPLAY_NAME,
+                settlementAccount != null ? settlementAccount.getAccountType() : SETTLEMENT_ACCOUNT_TYPE);
     }
 
     private String resolveHistoryAccountNumber(SettlementTransaction settlementTransaction) {

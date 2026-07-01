@@ -24,6 +24,14 @@ public record SettlementTransactionResponse(
         String pacs002Status,
         LocalDateTime dateTime,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LedgerPartyDisplay senderDisplay,
+        LedgerPartyDisplay receiverDisplay
 ) {
+    public record LedgerPartyDisplay(
+            String accountNumber,
+            String name,
+            String accountType
+    ) {
+    }
 }
