@@ -26,4 +26,6 @@ public interface TransactionService {
     TransactionDetailResponse rejectTransaction(Long transactionId);
 
     TransactionDetailResponse approveTransaction(Long transactionId);
+
+    TransactionDetailResponse revertTransaction(Long transactionId);
 }

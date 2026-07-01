@@ -145,13 +145,13 @@ public class Admi002ProcessingService {
     private void markTransactionAdmi002Received(Transaction transaction) {
         Transaction lockedTransaction = transactionRepository.findByTransactionIdForUpdate(transaction.getTransactionId())
                 .orElse(transaction);
-        lockedTransaction.setTransactionStatus(TransactionStatus.ADMI002_RECEIVED.name());
+        lockedTransaction.setTransactionStatus(TransactionStatus.FAILED.name());
         lockedTransaction.setPendingPaymentKey(null);
         transactionRepository.saveAndFlush(lockedTransaction);
 
         messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(lockedTransaction.getTransactionId())
                 .ifPresent(messageHeader -> {
-                    messageHeader.setMessageStatus(TransactionStatus.ADMI002_RECEIVED.name());
+                    messageHeader.setMessageStatus(TransactionStatus.FAILED.name());
                     messageHeaderRepository.saveAndFlush(messageHeader);
                 });
     }

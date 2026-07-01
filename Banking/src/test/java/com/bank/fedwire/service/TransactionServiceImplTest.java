@@ -13,9 +13,11 @@ import com.bank.fedwire.repository.ADMI002Repository;
 import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.DashboardActivityRepository;
+import com.bank.fedwire.repository.EmployeeTransactionQueueProjection;
 import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS002Repository;
 import com.bank.fedwire.repository.PACS008Repository;
+import com.bank.fedwire.repository.SettlementTransactionRepository;
 import com.bank.fedwire.repository.TransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +32,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,6 +61,9 @@ class TransactionServiceImplTest {
 
     @Mock
     private SettlementTransactionService settlementTransactionService;
+
+    @Mock
+    private SettlementTransactionRepository settlementTransactionRepository;
 
     @Mock
     private DashboardActivityRepository dashboardActivityRepository;
@@ -118,12 +124,12 @@ class TransactionServiceImplTest {
 
     @Test
     void queueReturnsCurrentTransactionStatusesFromRepository() {
-        List<EmployeeTransactionQueueResponse> queue = List.of(
-                EmployeeTransactionQueueResponse.builder().transactionId(1L).status("PENDING").build(),
-                EmployeeTransactionQueueResponse.builder().transactionId(2L).status("APPROVED").build(),
-                EmployeeTransactionQueueResponse.builder().transactionId(3L).status("REJECTED").build(),
-                EmployeeTransactionQueueResponse.builder().transactionId(4L).status("COMPLETED").build());
-        when(transactionRepository.findEmployeeTransactionQueue()).thenReturn(queue);
+        List<EmployeeTransactionQueueProjection> queue = List.of(
+                queueProjection(1L, "PENDING"),
+                queueProjection(2L, "APPROVED"),
+                queueProjection(3L, "REJECTED"),
+                queueProjection(4L, "COMPLETED"));
+        when(transactionRepository.findEmployeeTransactionQueue(anyInt())).thenReturn(queue);
 
         List<EmployeeTransactionQueueResponse> response = transactionService.getEmployeeTransactionQueue();
 
@@ -151,6 +157,45 @@ class TransactionServiceImplTest {
                         .routingNumber("031000503")
                         .countryCode("US")
                         .build()));
+    }
+
+    private EmployeeTransactionQueueProjection queueProjection(Long transactionId, String status) {
+        return new EmployeeTransactionQueueProjection() {
+            @Override
+            public Long getTransactionId() {
+                return transactionId;
+            }
+
+            @Override
+            public String getTransactionReference() {
+                return String.valueOf(transactionId);
+            }
+
+            @Override
+            public String getSenderName() {
+                return "Sender";
+            }
+
+            @Override
+            public String getBeneficiaryName() {
+                return "Receiver";
+            }
+
+            @Override
+            public BigDecimal getAmount() {
+                return new BigDecimal("125.00");
+            }
+
+            @Override
+            public String getStatus() {
+                return status;
+            }
+
+            @Override
+            public LocalDateTime getPaymentDate() {
+                return LocalDateTime.of(2026, 6, 30, 10, 0);
+            }
+        };
     }
 
     private Transaction baseTransaction(String status) {

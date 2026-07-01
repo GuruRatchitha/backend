@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -71,6 +72,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDataAccess(DataAccessException ex) {
         log.error("Database operation failed", ex);
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Database operation failed while processing the request.", null);
+    }
+
+    @ExceptionHandler(CannotCreateTransactionException.class)
+    public ResponseEntity<ErrorResponse> handleCannotCreateTransaction(CannotCreateTransactionException ex) {
+        log.error("Database connection is unavailable", ex);
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "Database connection is unavailable. Please retry.", null);
     }
 
     @ExceptionHandler({

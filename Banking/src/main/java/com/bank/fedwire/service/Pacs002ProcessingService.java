@@ -68,12 +68,7 @@ public class Pacs002ProcessingService {
             pacs002Repository.saveAndFlush(pacs002);
 
             if (transaction.isPresent() && isSettlementStatus(normalizedStatus)) {
-                try {
-                    settlementTransactionService.processPacs002(transaction.get(), pacs002);
-                } catch (Exception settlementException) {
-                    log.error("PACS002 XML was saved but settlement processing failed transactionId={}, messageId={}",
-                            transaction.get().getTransactionId(), parsed.getMessageId(), settlementException);
-                }
+                settlementTransactionService.processPacs002(transaction.get(), pacs002);
             } else if (!isSettlementStatus(normalizedStatus)) {
                 log.warn("PACS002 XML saved without settlement update because status is missing or unsupported status={}, messageId={}",
                         normalizedStatus, parsed.getMessageId());
@@ -128,7 +123,7 @@ public class Pacs002ProcessingService {
     }
 
     private boolean isSettlementStatus(String status) {
-        return "ACSC".equals(status) || "ACCP".equals(status) || "RJCT".equals(status);
+        return "ACSC".equals(status) || "ACCP".equals(status) || "ACSP".equals(status) || "RJCT".equals(status);
     }
 
     private String normalizeStatus(String status) {
@@ -145,6 +140,9 @@ public class Pacs002ProcessingService {
         }
         if (value.contains("ACCP")) {
             return "ACCP";
+        }
+        if (value.contains("ACSP")) {
+            return "ACSP";
         }
         return value;
     }

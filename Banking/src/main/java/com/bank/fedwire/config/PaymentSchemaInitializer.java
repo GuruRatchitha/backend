@@ -118,6 +118,10 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
         // END TEMPORARY
         addUniqueIndexIfMissing("transactions", "uk_transactions_pending_payment_key",
                 "ALTER TABLE transactions ADD CONSTRAINT uk_transactions_pending_payment_key UNIQUE (pending_payment_key)");
+        addIndexIfMissing("transactions", "idx_transactions_queue_date",
+                "ALTER TABLE transactions ADD INDEX idx_transactions_queue_date (transaction_date_time DESC)");
+        addIndexIfMissing("transactions", "idx_transactions_account_number",
+                "ALTER TABLE transactions ADD INDEX idx_transactions_account_number (account_number)");
     }
 
     private void ensurePaymentMessageTables() {
@@ -392,6 +396,12 @@ public class PaymentSchemaInitializer implements ApplicationRunner {
     }
 
     private void addUniqueIndexIfMissing(String tableName, String indexName, String ddl) {
+        if (!indexExists(tableName, indexName)) {
+            jdbcTemplate.execute(ddl);
+        }
+    }
+
+    private void addIndexIfMissing(String tableName, String indexName, String ddl) {
         if (!indexExists(tableName, indexName)) {
             jdbcTemplate.execute(ddl);
         }

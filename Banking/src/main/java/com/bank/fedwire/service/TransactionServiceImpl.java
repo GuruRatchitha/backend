@@ -8,15 +8,21 @@ import com.bank.fedwire.entity.Beneficiary;
 import com.bank.fedwire.entity.DashboardActivity;
 import com.bank.fedwire.entity.MessageHeader;
 import com.bank.fedwire.entity.PACS008;
+import com.bank.fedwire.entity.PACS002;
+import com.bank.fedwire.entity.ADMI002;
+import com.bank.fedwire.entity.SettlementTransactionStatus;
+import com.bank.fedwire.entity.SettlementTransactionType;
 import com.bank.fedwire.entity.Transaction;
 import com.bank.fedwire.entity.User;
 import com.bank.fedwire.repository.ADMI002Repository;
 import com.bank.fedwire.repository.AccountRepository;
 import com.bank.fedwire.repository.BeneficiaryRepository;
 import com.bank.fedwire.repository.DashboardActivityRepository;
+import com.bank.fedwire.repository.EmployeeTransactionQueueProjection;
 import com.bank.fedwire.repository.MessageHeaderRepository;
 import com.bank.fedwire.repository.PACS002Repository;
 import com.bank.fedwire.repository.PACS008Repository;
+import com.bank.fedwire.repository.SettlementTransactionRepository;
 import com.bank.fedwire.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -39,9 +45,14 @@ public class TransactionServiceImpl implements TransactionService {
     private static final String STATUS_ON_HOLD = "ON_HOLD";
     private static final String STATUS_REJECTED = "REJECTED";
     private static final String STATUS_APPROVED = "APPROVED";
+    private static final String STATUS_PROCESSING = "PROCESSING";
+    private static final String STATUS_RETURN = "RETURN";
+    private static final String STATUS_REVERTED = "REVERTED";
+    private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_COMPLETED = "COMPLETED";
     private static final String STATUS_WAITING = "WAITING_FOR_PACS002";
     private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final int DEFAULT_EMPLOYEE_QUEUE_SIZE = 50;
 
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
@@ -51,6 +62,7 @@ public class TransactionServiceImpl implements TransactionService {
     private final ADMI002Repository admi002Repository;
     private final PACS008Repository pacs008Repository;
     private final SettlementTransactionService settlementTransactionService;
+    private final SettlementTransactionRepository settlementTransactionRepository;
     private final DashboardActivityRepository dashboardActivityRepository;
 
     @Override
@@ -75,7 +87,9 @@ public class TransactionServiceImpl implements TransactionService {
     @Override
     @Transactional(readOnly = true)
     public List<EmployeeTransactionQueueResponse> getEmployeeTransactionQueue() {
-        return transactionRepository.findEmployeeTransactionQueue();
+        return transactionRepository.findEmployeeTransactionQueue(DEFAULT_EMPLOYEE_QUEUE_SIZE).stream()
+                .map(this::toEmployeeTransactionQueueResponse)
+                .toList();
     }
 
     @Override
@@ -156,6 +170,14 @@ public class TransactionServiceImpl implements TransactionService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found")));
     }
 
+    @Override
+    @Transactional
+    public TransactionDetailResponse revertTransaction(Long transactionId) {
+        settlementTransactionService.revertToSender(transactionId);
+        return toEmployeeTransactionDetailResponse(transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found")));
+    }
+
     private TransactionDetailResponse updateEmployeeTransactionStatus(Long transactionId, String status) {
         if (transactionId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "transactionId is required");
@@ -205,6 +227,19 @@ public class TransactionServiceImpl implements TransactionService {
                 .build();
     }
 
+    private EmployeeTransactionQueueResponse toEmployeeTransactionQueueResponse(
+            EmployeeTransactionQueueProjection transaction) {
+        return EmployeeTransactionQueueResponse.builder()
+                .transactionId(transaction.getTransactionId())
+                .transactionReference(transaction.getTransactionReference())
+                .senderName(transaction.getSenderName())
+                .beneficiaryName(transaction.getBeneficiaryName())
+                .amount(transaction.getAmount())
+                .status(transaction.getStatus())
+                .paymentDate(transaction.getPaymentDate())
+                .build();
+    }
+
     private TransactionDetailResponse toEmployeeTransactionDetailResponse(Transaction transaction) {
         Transaction currentTransaction = transactionRepository.findById(transaction.getTransactionId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Transaction not found"));
@@ -220,9 +255,39 @@ public class TransactionServiceImpl implements TransactionService {
                         HttpStatus.NOT_FOUND,
                         "Beneficiary not found for account number " + transaction.getBeneficiaryAccountNumber()));
 
+        Optional<PACS002> latestPacs002 = pacs002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(
+                currentTransaction.getTransactionId());
+        Optional<ADMI002> latestAdmi002 = admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(
+                currentTransaction.getTransactionId());
+        boolean beneficiarySettled = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                currentTransaction.getTransactionId(),
+                SettlementTransactionType.CREDIT_TO_BENEFICIARY,
+                SettlementTransactionStatus.SUCCESS);
+        boolean reverted = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
+                currentTransaction.getTransactionId(),
+                SettlementTransactionType.RETURN_TO_SENDER,
+                SettlementTransactionStatus.SUCCESS);
+        String transactionStatus = currentTransaction.getTransactionStatus();
+        String payaptStatus = latestPacs002.map(PACS002::getTransactionStatus).orElse(null);
+        String rejectionReason = latestAdmi002.map(this::admi002RejectionReason)
+                .or(() -> latestPacs002.map(this::pacs002RejectionReason))
+                .filter(reason -> reason != null && !reason.isBlank())
+                .orElse(null);
+        boolean processCompleted = STATUS_COMPLETED.equalsIgnoreCase(transactionStatus)
+                || STATUS_REVERTED.equalsIgnoreCase(transactionStatus);
+
         return TransactionDetailResponse.builder()
                 .transactionId(currentTransaction.getTransactionId())
                 .status(currentTransaction.getTransactionStatus())
+                .transactionStatus(transactionStatus)
+                .payaptStatus(payaptStatus)
+                .rejectionReason(rejectionReason)
+                .canRevert(STATUS_RETURN.equalsIgnoreCase(transactionStatus) && !reverted)
+                .reverted(reverted || STATUS_REVERTED.equalsIgnoreCase(transactionStatus))
+                .settlementCompleted(beneficiarySettled)
+                .processCompleted(processCompleted)
+                .currentPipelineStep(resolveCurrentPipelineStep(transactionStatus, payaptStatus, rejectionReason,
+                        beneficiarySettled, reverted))
                 .senderDetails(TransactionDetailResponse.SenderDetails.builder()
                         .senderName(senderUser != null ? senderUser.getUserName() : null)
                         .senderAccountNumber(senderAccount.getAccountNumber())
@@ -273,10 +338,66 @@ public class TransactionServiceImpl implements TransactionService {
 
     private boolean isFinalStatus(String status) {
         return STATUS_APPROVED.equalsIgnoreCase(status)
+                || STATUS_PROCESSING.equalsIgnoreCase(status)
                 || STATUS_COMPLETED.equalsIgnoreCase(status)
                 || STATUS_REJECTED.equalsIgnoreCase(status)
+                || STATUS_RETURN.equalsIgnoreCase(status)
+                || STATUS_REVERTED.equalsIgnoreCase(status)
+                || STATUS_FAILED.equalsIgnoreCase(status)
                 || STATUS_WAITING.equalsIgnoreCase(status)
                 || STATUS_SUCCESS.equalsIgnoreCase(status);
+    }
+
+    private String pacs002RejectionReason(PACS002 pacs002) {
+        if (pacs002 == null || !"RJCT".equalsIgnoreCase(pacs002.getTransactionStatus())) {
+            return null;
+        }
+        return pacs002.getReasonCode();
+    }
+
+    private String admi002RejectionReason(ADMI002 admi002) {
+        if (admi002 == null) {
+            return null;
+        }
+        if (admi002.getRejectReasonDescription() != null && !admi002.getRejectReasonDescription().isBlank()) {
+            return admi002.getRejectReasonDescription();
+        }
+        if (admi002.getErrorDescription() != null && !admi002.getErrorDescription().isBlank()) {
+            return admi002.getErrorDescription();
+        }
+        if (admi002.getRejectReasonCode() != null && !admi002.getRejectReasonCode().isBlank()) {
+            return admi002.getRejectReasonCode();
+        }
+        return admi002.getErrorCode();
+    }
+
+    private String resolveCurrentPipelineStep(String transactionStatus,
+                                              String payaptStatus,
+                                              String rejectionReason,
+                                              boolean beneficiarySettled,
+        boolean reverted) {
+        if (STATUS_FAILED.equalsIgnoreCase(transactionStatus)) {
+            return "TRANSACTION_DECISION";
+        }
+        if (STATUS_REVERTED.equalsIgnoreCase(transactionStatus) || reverted) {
+            return "PROCESS_COMPLETED";
+        }
+        if (STATUS_RETURN.equalsIgnoreCase(transactionStatus)) {
+            return "REVERT_PENDING";
+        }
+        if (STATUS_COMPLETED.equalsIgnoreCase(transactionStatus) || beneficiarySettled) {
+            return "PROCESS_COMPLETED";
+        }
+        if ("ACSC".equalsIgnoreCase(payaptStatus)) {
+            return "SETTLEMENT";
+        }
+        if (payaptStatus != null && !payaptStatus.isBlank()) {
+            return "TRANSACTION_DECISION";
+        }
+        if (STATUS_PROCESSING.equalsIgnoreCase(transactionStatus) || STATUS_WAITING.equalsIgnoreCase(transactionStatus)) {
+            return "RESPONSE_RECEIVED";
+        }
+        return "PACS008_SENT";
     }
 
     private String normalizeCountry(String countryCode) {

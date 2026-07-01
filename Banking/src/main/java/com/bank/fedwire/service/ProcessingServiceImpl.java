@@ -103,8 +103,8 @@ public class ProcessingServiceImpl implements ProcessingService {
                     null, "Transaction decision pending");
         }
         if (RESPONSE_ADMI002.equals(responseInfo.responseType())) {
-            return step(STEP_TRANSACTION_DECISION, ProcessingStatus.PENDING, RESPONSE_ADMI002, DECISION_PENDING, null, null,
-                    responseInfo.receivedAt(), "Transaction decision pending because ADMI.002 was received");
+            return step(STEP_TRANSACTION_DECISION, ProcessingStatus.FAILED, RESPONSE_ADMI002, DECISION_REJECTED, null, null,
+                    responseInfo.receivedAt(), responseInfo.rejectionReason());
         }
         return switch (decisionInfo.decision()) {
             case DECISION_ACCEPTED -> step(STEP_TRANSACTION_DECISION, ProcessingStatus.COMPLETED, RESPONSE_PACS002,
@@ -120,8 +120,8 @@ public class ProcessingServiceImpl implements ProcessingService {
                                              DecisionInfo decisionInfo,
                                              SettlementInfo settlementInfo) {
         if (RESPONSE_ADMI002.equals(responseInfo.responseType())) {
-            return step(STEP_SETTLEMENT, ProcessingStatus.NOT_APPLICABLE, RESPONSE_ADMI002, DECISION_PENDING, null, null,
-                    null, "Settlement not applicable because syntax validation failed");
+            return step(STEP_SETTLEMENT, ProcessingStatus.NOT_APPLICABLE, RESPONSE_ADMI002, DECISION_REJECTED, null, null,
+                    null, responseInfo.rejectionReason());
         }
         if (settlementInfo.completedAt() != null) {
             return step(STEP_SETTLEMENT, ProcessingStatus.COMPLETED, null, decisionInfo.decision(), decisionInfo.txStatus(),
@@ -141,8 +141,8 @@ public class ProcessingServiceImpl implements ProcessingService {
 
     private ProcessingStepDTO processCompletedStep(ResponseInfo responseInfo, SettlementInfo settlementInfo) {
         if (RESPONSE_ADMI002.equals(responseInfo.responseType())) {
-            return step(STEP_PROCESS_COMPLETED, ProcessingStatus.NOT_APPLICABLE, RESPONSE_ADMI002, DECISION_PENDING, null, null,
-                    null, "Workflow stopped before transaction processing");
+            return step(STEP_PROCESS_COMPLETED, ProcessingStatus.NOT_APPLICABLE, RESPONSE_ADMI002, DECISION_REJECTED, null, null,
+                    null, responseInfo.rejectionReason());
         }
         if (settlementInfo.completedAt() != null) {
             return step(STEP_PROCESS_COMPLETED, ProcessingStatus.COMPLETED, null, null, null, null,
@@ -157,12 +157,13 @@ public class ProcessingServiceImpl implements ProcessingService {
         LocalDateTime admi002ReceivedAt = pipeline.getAdmi002ReceivedTimestamp();
 
         if (pacs002ReceivedAt == null && admi002ReceivedAt == null) {
-            return new ResponseInfo(null, null, null);
+            return new ResponseInfo(null, null, null, null);
         }
         if (admi002ReceivedAt != null && (pacs002ReceivedAt == null || admi002ReceivedAt.isAfter(pacs002ReceivedAt))) {
-            return new ResponseInfo(RESPONSE_ADMI002, admi002ReceivedAt, null);
+            return new ResponseInfo(RESPONSE_ADMI002, admi002ReceivedAt, null, resolveAdmi002Reason(pipeline));
         }
-        return new ResponseInfo(RESPONSE_PACS002, pacs002ReceivedAt, pipeline.getPacs002TransactionStatus());
+        return new ResponseInfo(RESPONSE_PACS002, pacs002ReceivedAt, pipeline.getPacs002TransactionStatus(),
+                pipeline.getPacs002ReasonCode());
     }
 
     private DecisionInfo resolveDecisionInfo(ResponseInfo responseInfo) {
@@ -209,7 +210,23 @@ public class ProcessingServiceImpl implements ProcessingService {
         return value == null || value.isBlank();
     }
 
-    private record ResponseInfo(String responseType, LocalDateTime receivedAt, String txStatus) {
+    private String resolveAdmi002Reason(ProcessingPipelineProjection pipeline) {
+        if (!isBlank(pipeline.getAdmi002RejectReasonDescription())) {
+            return pipeline.getAdmi002RejectReasonDescription();
+        }
+        if (!isBlank(pipeline.getAdmi002ErrorDescription())) {
+            return pipeline.getAdmi002ErrorDescription();
+        }
+        if (!isBlank(pipeline.getAdmi002RejectReasonCode())) {
+            return pipeline.getAdmi002RejectReasonCode();
+        }
+        if (!isBlank(pipeline.getAdmi002ErrorCode())) {
+            return pipeline.getAdmi002ErrorCode();
+        }
+        return "ADMI.002 rejected the payment message";
+    }
+
+    private record ResponseInfo(String responseType, LocalDateTime receivedAt, String txStatus, String rejectionReason) {
     }
 
     private record DecisionInfo(String decision, String txStatus) {

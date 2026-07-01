@@ -193,7 +193,7 @@ class SettlementTransactionServiceImplTest {
     }
 
     @Test
-    void processPacs002RejectedRecordsReturnedAmountWithoutCreditingSender() {
+    void processPacs002RejectedMarksTransactionReturnWithoutCreditingSender() {
         Transaction transaction = Transaction.builder()
                 .transactionId(7001L)
                 .accountNumber("111111111")
@@ -211,10 +211,6 @@ class SettlementTransactionServiceImplTest {
                 SettlementTransactionType.DEBIT_TO_SETTLEMENT,
                 "111111111",
                 "222222222");
-        Account settlementAccount = Account.builder()
-                .accountNumber("999900001")
-                .balance(new BigDecimal("1000.00"))
-                .build();
         MessageHeader messageHeader = MessageHeader.builder()
                 .transactionId(7001L)
                 .messageStatus("WAITING_FOR_PACS002")
@@ -226,20 +222,16 @@ class SettlementTransactionServiceImplTest {
                 7001L,
                 SettlementTransactionType.DEBIT_TO_SETTLEMENT))
                 .thenReturn(Optional.of(settlementDebit));
-        when(accountRepository.findByAccountNumberForUpdate("999900001"))
-                .thenReturn(Optional.of(settlementAccount));
         when(messageHeaderRepository.findTopByTransactionIdOrderByCreatedDateDesc(7001L))
                 .thenReturn(Optional.of(messageHeader));
 
         settlementTransactionService.processPacs002(transaction, pacs002);
 
         verify(accountRepository, never()).save(any(Account.class));
-        verify(settlementTransactionRepository).save(argThat(saved ->
-                saved.getTransactionType() == SettlementTransactionType.RETURN_TO_SENDER
-                        && saved.getAmount().compareTo(new BigDecimal("125.00")) == 0
-                        && "RJCT".equals(saved.getPacs002Status())));
-        assertEquals("REJECTED", transaction.getTransactionStatus());
-        assertEquals(new BigDecimal("1000.00"), settlementAccount.getBalance());
+        verify(settlementTransactionRepository, never()).save(argThat(saved ->
+                saved.getTransactionType() == SettlementTransactionType.RETURN_TO_SENDER));
+        assertEquals("RETURN", transaction.getTransactionStatus());
+        assertEquals("RETURN", messageHeader.getMessageStatus());
     }
 
     private SettlementTransaction settlementTransaction(
