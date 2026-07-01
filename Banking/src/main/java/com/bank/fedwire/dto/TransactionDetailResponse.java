@@ -26,6 +26,26 @@ public class TransactionDetailResponse {
 
     private String rejectionReason;
 
+    private String pacs002Reason;
+
+    private String admi002Reason;
+
+    private LocalDateTime paymentTimestamp;
+
+    private String uetr;
+
+    private Boolean hasPacs008;
+
+    private Boolean hasPacs002;
+
+    private Boolean hasAdmi002;
+
+    private String pacs008Xml;
+
+    private String pacs002Xml;
+
+    private String admi002Xml;
+
     private Boolean canRevert;
 
     private Boolean reverted;

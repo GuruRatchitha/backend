@@ -30,7 +30,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.xml.sax.InputSource;
 
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.StringReader;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -237,6 +243,7 @@ public class TransactionServiceImpl implements TransactionService {
                 .amount(transaction.getAmount())
                 .status(transaction.getStatus())
                 .paymentDate(transaction.getPaymentDate())
+                .paymentTimestamp(transaction.getPaymentDate())
                 .build();
     }
 
@@ -259,6 +266,20 @@ public class TransactionServiceImpl implements TransactionService {
                 currentTransaction.getTransactionId());
         Optional<ADMI002> latestAdmi002 = admi002Repository.findTopByTransactionIdOrderByReceivedTimestampDesc(
                 currentTransaction.getTransactionId());
+        Optional<PACS008> latestPacs008 = pacs008Repository.findTopByTransactionIdOrderByCreatedDateDesc(
+                currentTransaction.getTransactionId());
+        String pacs008Xml = latestPacs008.map(PACS008::getXmlPayload)
+                .filter(this::hasText)
+                .orElse(null);
+        String pacs002Xml = latestPacs002.map(PACS002::getXmlPayload)
+                .filter(this::hasText)
+                .orElse(null);
+        String admi002Xml = latestAdmi002.map(ADMI002::getXmlPayload)
+                .filter(this::hasText)
+                .orElse(null);
+        boolean hasPacs008 = pacs008Xml != null;
+        boolean hasPacs002 = pacs002Xml != null;
+        boolean hasAdmi002 = admi002Xml != null;
         boolean beneficiarySettled = settlementTransactionRepository.existsByPaymentIdAndTransactionTypeAndStatus(
                 currentTransaction.getTransactionId(),
                 SettlementTransactionType.CREDIT_TO_BENEFICIARY,
@@ -269,6 +290,12 @@ public class TransactionServiceImpl implements TransactionService {
                 SettlementTransactionStatus.SUCCESS);
         String transactionStatus = currentTransaction.getTransactionStatus();
         String payaptStatus = latestPacs002.map(PACS002::getTransactionStatus).orElse(null);
+        String pacs002Reason = resolvePacs002Reason(latestPacs002.orElse(null), pacs002Xml, transactionStatus);
+        String admi002Reason = extractXmlText(admi002Xml, "RsnDesc").orElse(null);
+        String uetr = latestPacs008.map(PACS008::getUetr)
+                .filter(this::hasText)
+                .or(() -> extractXmlText(pacs008Xml, "UETR"))
+                .orElse(null);
         String rejectionReason = latestAdmi002.map(this::admi002RejectionReason)
                 .or(() -> latestPacs002.map(this::pacs002RejectionReason))
                 .filter(reason -> reason != null && !reason.isBlank())
@@ -282,6 +309,16 @@ public class TransactionServiceImpl implements TransactionService {
                 .transactionStatus(transactionStatus)
                 .payaptStatus(payaptStatus)
                 .rejectionReason(rejectionReason)
+                .pacs002Reason(pacs002Reason)
+                .admi002Reason(admi002Reason)
+                .paymentTimestamp(currentTransaction.getTransactionDateTime())
+                .uetr(uetr)
+                .hasPacs008(hasPacs008)
+                .hasPacs002(hasPacs002)
+                .hasAdmi002(hasAdmi002)
+                .pacs008Xml(pacs008Xml)
+                .pacs002Xml(pacs002Xml)
+                .admi002Xml(admi002Xml)
                 .canRevert(STATUS_RETURN.equalsIgnoreCase(transactionStatus) && !reverted)
                 .reverted(reverted || STATUS_REVERTED.equalsIgnoreCase(transactionStatus))
                 .settlementCompleted(beneficiarySettled)
@@ -310,9 +347,9 @@ public class TransactionServiceImpl implements TransactionService {
                         .channel(CHANNEL_FEDWIRE)
                         .build())
                 .xmlMessages(TransactionDetailResponse.XmlMessages.builder()
-                        .pacs008(findEmployeeTransactionPacs008Xml(currentTransaction.getTransactionId()).orElse(null))
-                        .pacs002(findEmployeeTransactionPacs002Xml(currentTransaction.getTransactionId()).orElse(null))
-                        .admi002(findEmployeeTransactionAdmi002Xml(currentTransaction.getTransactionId()).orElse(null))
+                        .pacs008(pacs008Xml)
+                        .pacs002(pacs002Xml)
+                        .admi002(admi002Xml)
                         .build())
                 .build();
     }
@@ -353,6 +390,17 @@ public class TransactionServiceImpl implements TransactionService {
             return null;
         }
         return pacs002.getReasonCode();
+    }
+
+    private String resolvePacs002Reason(PACS002 pacs002, String pacs002Xml, String transactionStatus) {
+        if (pacs002 == null || pacs002Xml == null) {
+            return null;
+        }
+        if (!STATUS_REJECTED.equalsIgnoreCase(transactionStatus)
+                && !"RJCT".equalsIgnoreCase(pacs002.getTransactionStatus())) {
+            return null;
+        }
+        return extractXmlText(pacs002Xml, "AddtlInf").orElse(null);
     }
 
     private String admi002RejectionReason(ADMI002 admi002) {
@@ -405,6 +453,38 @@ public class TransactionServiceImpl implements TransactionService {
             return null;
         }
         return countryCode.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private Optional<String> extractXmlText(String xml, String localName) {
+        if (!hasText(xml) || !hasText(localName)) {
+            return Optional.empty();
+        }
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+
+            Document document = factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
+            Node node = document.getElementsByTagNameNS("*", localName).item(0);
+            if (node == null) {
+                node = document.getElementsByTagName(localName).item(0);
+            }
+            if (node == null || !hasText(node.getTextContent())) {
+                return Optional.empty();
+            }
+            return Optional.of(node.getTextContent().trim());
+        } catch (Exception ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private void logActivity(String activity, String description) {
